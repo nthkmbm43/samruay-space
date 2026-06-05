@@ -33,25 +33,104 @@ exports.handleLineWebhook = async (req, res) => {
 
 async function handleIncomingText(lineUserId, text, replyToken) {
   try {
-    // Basic Registration Command
+    // Basic Registration Commands
     if (text.startsWith('ลงทะเบียน')) {
-      return await handleRegistration(lineUserId, text, replyToken);
+      if (text === 'ลงทะเบียนใหม่') {
+        chatState.set(lineUserId, { step: 'WAITING_REGISTER_NAME', timestamp: Date.now() });
+        return await replyText(replyToken, 'ยินดีต้อนรับครับ! เพื่อความสะดวกรวดเร็ว\nกรุณาพิมพ์ "ชื่อ-นามสกุล" ของคุณครับ');
+      } else {
+        return await handleOldRegistrationLinking(lineUserId, text, replyToken);
+      }
     }
-
-    const user = await User.findOne({ where: { line_user_id: lineUserId } });
-    if (!user) {
-      return await replyText(replyToken, 'กรุณาพิมพ์ "ลงทะเบียน [เบอร์โทรศัพท์]" เพื่อผูกบัญชีก่อนใช้งานระบบครับ');
-    }
-
-    const tenant = await Tenant.findOne({ where: { user_id: user.id }, include: [{ model: Room, as: 'room' }] });
 
     // --- State Machine ---
     const currentState = chatState.get(lineUserId);
     if (currentState) {
+      if (currentState.step === 'WAITING_REGISTER_NAME') {
+        const fullName = text.trim();
+        const parts = fullName.split(' ');
+        const first_name = parts[0];
+        const last_name = parts.slice(1).join(' ') || '';
+        
+        chatState.set(lineUserId, { 
+          step: 'WAITING_REGISTER_PHONE', 
+          data: { first_name, last_name },
+          timestamp: Date.now() 
+        });
+        return await replyText(replyToken, `รับทราบครับคุณ ${first_name}\nกรุณาพิมพ์ "เบอร์โทรศัพท์" ของคุณครับ (เช่น 0812345678)`);
+      }
+
+      if (currentState.step === 'WAITING_REGISTER_PHONE') {
+        const phone = text.replace(/[^0-9]/g, '');
+        if (phone.length < 9) {
+          return await replyText(replyToken, 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง กรุณาพิมพ์ใหม่อีกครั้งครับ');
+        }
+
+        // Search for available rooms
+        const availableRooms = await Room.findAll({
+          where: { status: 'available' },
+          order: [['room_number', 'ASC']]
+        });
+
+        if (availableRooms.length === 0) {
+          chatState.delete(lineUserId);
+          return await replyText(replyToken, 'ขออภัยครับ ขณะนี้ไม่มีห้องว่างให้จองเลยครับ กรุณาติดต่อแอดมิน');
+        }
+
+        const roomListStr = availableRooms.map(r => `🔹 ห้อง ${r.room_number}`).join('\n');
+        
+        chatState.set(lineUserId, {
+          step: 'WAITING_REGISTER_ROOM',
+          data: { ...currentState.data, phone },
+          timestamp: Date.now()
+        });
+
+        return await replyText(replyToken, `ข้อมูลครบถ้วนครับ!\nนี่คือห้องที่ว่างอยู่ตอนนี้:\n\n${roomListStr}\n\nหากสนใจจอง กรุณาพิมพ์คำว่า "จองห้อง ตามด้วยเลขห้อง" ครับ (เช่น จองห้อง ${availableRooms[0].room_number})`);
+      }
+
+      if (currentState.step === 'WAITING_REGISTER_ROOM') {
+        if (!text.startsWith('จองห้อง')) {
+          return await replyText(replyToken, 'กรุณาพิมพ์คำว่า "จองห้อง ตามด้วยเลขห้อง" (เช่น จองห้อง 101) เพื่อยืนยันครับ หรือพิมพ์ "ยกเลิก"');
+        }
+        
+        const roomNum = text.replace('จองห้อง', '').trim();
+        const room = await Room.findOne({ where: { room_number: roomNum, status: 'available' } });
+        
+        if (!room) {
+          return await replyText(replyToken, `ขออภัยครับ ไม่พบห้อง ${roomNum} หรือห้องนี้ไม่ว่างแล้ว กรุณาเลือกเลขห้องใหม่ครับ`);
+        }
+
+        // Execute Booking
+        const { first_name, last_name, phone } = currentState.data;
+        
+        let user = await User.findOne({ where: { phone } });
+        if (!user) {
+          user = await User.create({
+            first_name,
+            last_name,
+            phone,
+            line_user_id: lineUserId,
+            role: 'tenant'
+          });
+        } else {
+          user.line_user_id = lineUserId;
+          await user.save();
+        }
+
+        await Tenant.create({ user_id: user.id, room_id: room.id });
+        room.status = 'occupied';
+        await room.save();
+
+        chatState.delete(lineUserId);
+        return await replyText(replyToken, `🎉 ยินดีด้วยครับ! คุณได้สิทธิ์จองห้อง ${room.room_number} เรียบร้อยแล้วครับ\nข้อมูลของคุณถูกบันทึกลงระบบแล้ว แอดมินจะติดต่อกลับไปในเร็วๆ นี้ครับ`);
+      }
+
       if (currentState.step === 'WAITING_MAINTENANCE_DETAIL') {
         chatState.delete(lineUserId);
         
-        // Save Maintenance Request
+        const user = await User.findOne({ where: { line_user_id: lineUserId } });
+        const tenant = user ? await Tenant.findOne({ where: { user_id: user.id }, include: [{ model: Room, as: 'room' }] }) : null;
+        
         await MaintenanceRequest.create({
           property_id: tenant?.room?.property_id || 1,
           room_id: tenant?.room_id,
@@ -65,6 +144,18 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         return await replyText(replyToken, '✅ รับเรื่องแจ้งซ่อมเรียบร้อยครับ ทางแอดมินจะรีบตรวจสอบและส่งช่างเข้าไปดำเนินการครับ (ระบบจะแจ้งเตือนเมื่อซ่อมเสร็จ)');
       }
     }
+
+    if (text === 'ยกเลิก') {
+      chatState.delete(lineUserId);
+      return await replyText(replyToken, 'ยกเลิกรายการปัจจุบันเรียบร้อยครับ');
+    }
+
+    const user = await User.findOne({ where: { line_user_id: lineUserId } });
+    if (!user) {
+      return await replyText(replyToken, 'คุณยังไม่ได้ลงทะเบียนครับ\nพิมพ์ "ลงทะเบียนใหม่" เพื่อจองห้องพัก หรือ "ลงทะเบียน [เบอร์โทร]" เพื่อผูกบัญชีเดิมครับ');
+    }
+
+    const tenant = await Tenant.findOne({ where: { user_id: user.id }, include: [{ model: Room, as: 'room' }] });
 
     // --- Menu Commands ---
     switch (text) {
@@ -145,19 +236,18 @@ async function handleIncomingImage(lineUserId, messageId, replyToken) {
   }
 }
 
-async function handleRegistration(lineUserId, text, replyToken) {
+async function handleOldRegistrationLinking(lineUserId, text, replyToken) {
   const phone = text.replace('ลงทะเบียน', '').trim();
-  if (!phone) return await replyText(replyToken, 'กรุณาระบุเบอร์โทรศัพท์ด้วยครับ เช่น\nลงทะเบียน 0812345678');
+  if (!phone) return await replyText(replyToken, 'พิมพ์ "ลงทะเบียนใหม่" เพื่อจองห้องพัก\nหรือพิมพ์ "ลงทะเบียน 0812345678" เพื่อผูกเบอร์เดิมครับ');
   
   const user = await User.findOne({ where: { phone } });
   if (!user) {
-    const liffUrl = process.env.LIFF_REGISTER_URL || 'https://liff.line.me/2006323631-Bq8ApepK';
-    return await replyText(replyToken, `ไม่พบเบอร์ ${phone} ในระบบครับ\n\nหากคุณเป็นผู้เช่าใหม่ที่ยังไม่เคยลงทะเบียน กรุณาคลิกลิงก์ด้านล่างเพื่อลงทะเบียนเข้าอยู่และเลือกห้องพักด้วยตัวเองครับ:\n${liffUrl}\n\nหรือหากเคยลงทะเบียนแล้ว กรุณาติดต่อแอดมินครับ`);
+    return await replyText(replyToken, `ไม่พบเบอร์ ${phone} ในระบบครับ\nหากต้องการจองห้องพักใหม่ พิมพ์คำว่า "ลงทะเบียนใหม่" ได้เลยครับ`);
   }
   
   user.line_user_id = lineUserId;
   await user.save();
-  return await replyText(replyToken, `ลงทะเบียนสำเร็จ! ยินดีต้อนรับคุณ ${user.first_name} เข้าสู่ระบบครับ`);
+  return await replyText(replyToken, `ผูกบัญชีสำเร็จ! ยินดีต้อนรับคุณ ${user.first_name} เข้าสู่ระบบครับ`);
 }
 
 async function replyText(replyToken, text) {
