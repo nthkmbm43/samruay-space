@@ -219,7 +219,23 @@ export default function PromotionsPage() {
             <div key={promo.id} className="bg-card rounded-xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow">
               {promo.image_url ? (
                 <div className="aspect-video w-full relative overflow-hidden bg-muted">
-                  <img src={`${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace('/api', '')}${promo.image_url}`} alt={promo.name} className="object-cover w-full h-full" />
+                  <img 
+                    src={`${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace('/api', '')}${promo.image_url}`} 
+                    alt={promo.name} 
+                    className="object-cover w-full h-full"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      if (e.currentTarget.nextElementSibling) {
+                        (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
+                      }
+                    }}
+                  />
+                  <div className="hidden absolute inset-0 bg-primary/10 items-center justify-center">
+                    <span className="text-primary/50 text-4xl flex flex-col items-center gap-2">
+                      <span>📢</span>
+                      <span className="text-sm font-medium text-primary/60">ภาพหายไปชั่วคราว</span>
+                    </span>
+                  </div>
                 </div>
               ) : (
                 <div className="aspect-video w-full bg-primary/10 flex items-center justify-center">

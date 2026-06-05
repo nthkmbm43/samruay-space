@@ -461,32 +461,37 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           });
 
           if (!existingInvoice) {
-            await Invoice.create({
-              invoice_number: `INV-${reading.period_year}${String(reading.period_month).padStart(2, '0')}-${tenant.Room?.room_number || tenant.room_id}`,
-              property_id: tenant.Room?.property_id || 1,
-              room_id: tenant.room_id,
-              tenant_id: tenant.id,
-              period_month: reading.period_month,
-              period_year: reading.period_year,
-              issue_date: new Date(),
-              due_date: new Date(new Date().setDate(new Date().getDate() + 5)),
-              room_price: roomPrice,
-              water_previous: reading.water_previous || 0, 
-              water_current: reading.water_current || 0, 
-              water_units: wUnits, 
-              water_rate: waterRate, 
-              water_amount: wAmount,
-              elec_previous: reading.elec_previous || 0, 
-              elec_current: reading.elec_current || 0, 
-              elec_units: eUnits, 
-              elec_rate: elecRate, 
-              elec_amount: eAmount,
-              subtotal: totalAmount, 
-              total: totalAmount,
-              status: 'pending', 
-              notes: `บิลเดือน ${reading.period_month}/${reading.period_year} (เสกบิลตามมิเตอร์จริง)`
-            }).catch(err => console.log('Mock generate error:', err));
-            generatedCount++;
+            try {
+              await Invoice.create({
+                invoice_number: `INV-${reading.period_year}${String(reading.period_month).padStart(2, '0')}-${tenant.Room?.room_number || tenant.room_id}`,
+                property_id: tenant.Room?.property_id || 1,
+                room_id: tenant.room_id,
+                tenant_id: tenant.id,
+                period_month: reading.period_month,
+                period_year: reading.period_year,
+                issue_date: new Date(),
+                due_date: new Date(new Date().setDate(new Date().getDate() + 5)),
+                room_price: roomPrice,
+                water_previous: reading.water_previous || 0, 
+                water_current: reading.water_current || 0, 
+                water_units: wUnits, 
+                water_rate: waterRate, 
+                water_amount: wAmount,
+                elec_previous: reading.elec_previous || 0, 
+                elec_current: reading.elec_current || 0, 
+                elec_units: eUnits, 
+                elec_rate: elecRate, 
+                elec_amount: eAmount,
+                subtotal: totalAmount, 
+                total: totalAmount,
+                status: 'pending', 
+                notes: `บิลเดือน ${reading.period_month}/${reading.period_year} (เสกบิลตามมิเตอร์จริง)`
+              });
+              generatedCount++;
+            } catch (err) {
+              console.log('Mock generate error:', err);
+              return await replyText(replyToken, `❌ เกิดข้อผิดพลาดในการสร้างบิล: ${err.message}`);
+            }
           } else {
              // Update the invoice with new rates and units
              existingInvoice.water_previous = reading.water_previous || 0;

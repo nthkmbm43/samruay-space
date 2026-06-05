@@ -250,7 +250,18 @@ export default function TenantsPage() {
                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                         <User className="w-4 h-4" />
                       </div>
-                      <span className="font-medium text-base">{tenant.user?.first_name} {tenant.user?.last_name}</span>
+                      <span className="flex flex-col">
+                        <span className="font-medium text-base">{tenant.user?.first_name} {tenant.user?.last_name}</span>
+                        <span className={`w-fit mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          tenant.status === 'active' ? 'bg-green-100 text-green-700' : 
+                          tenant.status === 'moving_out' ? 'bg-purple-100 text-purple-700 ring-1 ring-purple-300' :
+                          'bg-orange-100 text-orange-700'
+                        }`}>
+                          {tenant.status === 'active' ? (t('active') || 'กำลังเช่า') : 
+                           tenant.status === 'moving_out' ? 'แจ้งย้ายออก' : 
+                           (t('inactive') || 'ไม่ได้เช่า')}
+                        </span>
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-4 font-medium">{tenant.room ? `${tenant.room.room_number}` : t('unassigned')}</td>

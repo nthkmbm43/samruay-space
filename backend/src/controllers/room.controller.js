@@ -89,8 +89,26 @@ exports.updateRoom = async (req, res) => {
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
+
+    const updateData = { ...req.body };
     
-    await room.update(req.body);
+    if (updateData.floor_number !== undefined) {
+      const [floor] = await Floor.findOrCreate({
+        where: { property_id: room.property_id, floor_number: updateData.floor_number },
+        defaults: { name: `ชั้น ${updateData.floor_number}` }
+      });
+      updateData.floor_id = floor.id;
+    }
+
+    if (updateData.room_type !== undefined) {
+      const [rType] = await RoomType.findOrCreate({
+        where: { property_id: room.property_id, name: updateData.room_type },
+        defaults: { base_price: updateData.price_override || room.price_override || 0 }
+      });
+      updateData.room_type_id = rType.id;
+    }
+    
+    await room.update(updateData);
     res.json(room);
   } catch (error) {
     console.error('Update room error:', error);

@@ -20,9 +20,9 @@ export default function RoomsPage() {
 
   // Form
   const [number, setNumber] = useState('');
-  const [type, setType] = useState('Studio');
-  const [price, setPrice] = useState('');
-  const [floor, setFloor] = useState('');
+  const [floor, setFloor] = useState('1');
+  const [type, setType] = useState('Standard Room');
+  const [price, setPrice] = useState('1500');
   const [propertyId, setPropertyId] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -128,8 +128,8 @@ export default function RoomsPage() {
                 <div>
                   <label className="text-sm font-medium">{t('roomType')}</label>
                   <select value={type} onChange={e => setType(e.target.value)} className="w-full mt-1 border rounded-md px-3 py-2 bg-background">
-                    <option>{t('standardRoom')}</option>
-                    <option>{t('suiteRoom')}</option>
+                    <option value="Standard Room">{t('standardRoom')}</option>
+                    <option value="Suite Room">{t('suiteRoom')}</option>
                   </select>
                 </div>
                 <div>
@@ -162,6 +162,8 @@ export default function RoomsPage() {
                   body: JSON.stringify({ 
                     room_number: editingRoom.room_number,
                     status: editingRoom.status,
+                    floor_number: editingRoom.floor_number !== undefined ? editingRoom.floor_number : editingRoom.Floor?.floor_number,
+                    room_type: editingRoom.room_type !== undefined ? editingRoom.room_type : editingRoom.RoomType?.name,
                     price_override: editingRoom.display_price !== undefined 
                       ? (editingRoom.display_price ? Number(editingRoom.display_price) : null) 
                       : editingRoom.price_override
@@ -192,10 +194,19 @@ export default function RoomsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">{t('roomType')}</label>
-                  <div className="text-base mt-2">{editingRoom.RoomType?.name || t('standardRoom')}</div>
+                  <label className="text-sm font-medium text-muted-foreground">{t('floor')}</label>
+                  <input type="number" required value={editingRoom.floor_number !== undefined ? editingRoom.floor_number : editingRoom.Floor?.floor_number || ''} onChange={e => setEditingRoom({...editingRoom, floor_number: e.target.value})} className="w-full mt-1 border rounded-md px-3 py-2 bg-background" />
                 </div>
                 <div>
+                  <label className="text-sm font-medium text-muted-foreground">{t('roomType')}</label>
+                  <select value={editingRoom.room_type !== undefined ? editingRoom.room_type : editingRoom.RoomType?.name || 'Standard Room'} onChange={e => setEditingRoom({...editingRoom, room_type: e.target.value})} className="w-full mt-1 border rounded-md px-3 py-2 bg-background">
+                    <option value="Standard Room">{t('standardRoom')}</option>
+                    <option value="Suite Room">{t('suiteRoom')}</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-start-2">
                   <label className="text-sm font-medium text-muted-foreground">{t('price')}</label>
                   <input type="number" required value={editingRoom.display_price || editingRoom.price_override || editingRoom.RoomType?.base_price || 0} onChange={e => setEditingRoom({...editingRoom, display_price: e.target.value})} className="w-full mt-1 border rounded-md px-3 py-2 bg-background" />
                 </div>
