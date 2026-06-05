@@ -284,29 +284,21 @@ async function handleIncomingImage(lineUserId, messageId, replyToken) {
       return await replyText(replyToken, 'คุณไม่มีบิลที่ต้องชำระในขณะนี้ครับ แต่เราบันทึกรูปภาพของคุณไว้แล้ว');
     }
 
-    // Download image from LINE
+    // Download image from LINE as buffer
     const stream = await client.getMessageContent(messageId);
-    const filename = `slip-${Date.now()}.jpg`;
-    const uploadsDir = path.join(__dirname, '../../uploads');
-    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-    
-    const filepath = path.join(uploadsDir, filename);
-    const writeStream = fs.createWriteStream(filepath);
-    
-    stream.pipe(writeStream);
-    await new Promise((resolve, reject) => {
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-    });
-
-    const slipUrl = `/uploads/${filename}`;
+    const chunks = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+    const base64Image = `data:image/jpeg;base64,${buffer.toString('base64')}`;
 
     const { Payment } = require('../models');
     await Payment.create({
       invoice_id: pendingInvoice.id,
       amount: pendingInvoice.total - (pendingInvoice.paid_amount || 0),
       method: 'bank_transfer',
-      slip_image: slipUrl,
+      slip_image: base64Image,
       status: 'pending'
     });
 
