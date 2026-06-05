@@ -1,0 +1,50 @@
+'use client';
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { translations } from '@/lib/translations';
+
+type Language = 'th' | 'en';
+
+interface LanguageContextType {
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  t: (key: string) => string;
+}
+
+const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+
+export function LanguageProvider({ children }: { children: React.ReactNode }) {
+  const [language, setLanguage] = useState<Language>('th');
+
+  useEffect(() => {
+    // Load from localStorage if available
+    const savedLang = localStorage.getItem('app_language') as Language;
+    if (savedLang && (savedLang === 'th' || savedLang === 'en')) {
+      setLanguage(savedLang);
+    }
+  }, []);
+
+  const handleSetLanguage = (lang: Language) => {
+    setLanguage(lang);
+    localStorage.setItem('app_language', lang);
+  };
+
+  const t = (key: string): string => {
+    // Support nested keys or flat keys, but right now we use flat keys
+    return (translations[language] as any)[key] || key;
+  };
+
+  return (
+    <LanguageContext.Provider value={{ language, setLanguage: handleSetLanguage, t }}>
+      {children}
+    </LanguageContext.Provider>
+  );
+}
+
+export function useLanguage() {
+  const context = useContext(LanguageContext);
+  if (context === undefined) {
+    throw new Error('useLanguage must be used within a LanguageProvider');
+  }
+  return context;
+}

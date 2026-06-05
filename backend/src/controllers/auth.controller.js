@@ -1,0 +1,109 @@
+const jwt = require('jsonwebtoken');
+const { User } = require('../models');
+
+const generateToken = (user) => {
+  return jwt.sign(
+    { id: user.id, email: user.email, role: user.role },
+    process.env.JWT_SECRET || 'fallback-secret',
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+};
+
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Find user
+    const user = await User.findOne({ where: { email } });
+    
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    
+    const bcrypt = require('bcryptjs');
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    
+    // Update last login
+    user.last_login_at = new Date();
+    await user.save();
+    
+    const token = generateToken(user);
+    
+    res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.me = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id, {
+      attributes: { exclude: ['password_hash'] }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.json(user);
+  } catch (error) {
+    console.error('Get me error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.register = async (req, res) => {
+  try {
+    const { email, password, first_name, last_name, role } = req.body;
+    
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+    
+    // In a real app, hash password using bcrypt
+    // const salt = await bcrypt.genSalt(10);
+    // const password_hash = await bcrypt.hash(password, salt);
+    const password_hash = password; // Temporary
+    
+    const user = await User.create({
+      email,
+      password_hash,
+      first_name,
+      last_name,
+      role: role || 'tenant'
+    });
+    
+    const token = generateToken(user);
+    
+    res.status(201).json({
+      message: 'User registered successfully',
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Register error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
