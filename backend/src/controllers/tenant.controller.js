@@ -52,11 +52,15 @@ exports.updateTenant = async (req, res) => {
       return res.status(404).json({ message: 'Tenant not found' });
     }
 
-    const { first_name, last_name, email, phone, room_id } = req.body;
+    const { first_name, last_name, email, phone, room_id, status } = req.body;
 
     // Update associated user
     if (tenant.user) {
       await tenant.user.update({ first_name, last_name, email, phone });
+    }
+
+    if (status !== undefined) {
+      await tenant.update({ status });
     }
 
     // Handle room change

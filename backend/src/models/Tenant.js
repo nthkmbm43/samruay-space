@@ -39,6 +39,10 @@ const Tenant = sequelize.define('Tenant', {
     type: DataTypes.STRING(20),
     allowNull: true
   },
+  status: {
+    type: DataTypes.STRING(20),
+    defaultValue: 'active'
+  },
   vehicle_info: {
     type: DataTypes.JSONB,
     defaultValue: []

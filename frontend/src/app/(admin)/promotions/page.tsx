@@ -225,7 +225,7 @@ export default function PromotionsPage() {
               {promo.image_url ? (
                 <div className="aspect-video w-full relative overflow-hidden bg-muted">
                   <img 
-                    src={`${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace('/api', '')}${promo.image_url}`} 
+                    src={promo.image_url.startsWith('data:') ? promo.image_url : `${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace('/api', '')}${promo.image_url}`} 
                     alt={promo.name} 
                     className="object-cover w-full h-full"
                     onError={(e) => {

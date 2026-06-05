@@ -156,7 +156,8 @@ export default function TenantsPage() {
                     last_name: viewingTenant.user?.last_name,
                     email: viewingTenant.user?.email,
                     phone: viewingTenant.user?.phone,
-                    room_id: viewingTenant.room_id ? Number(viewingTenant.room_id) : null
+                    room_id: viewingTenant.room_id ? Number(viewingTenant.room_id) : null,
+                    status: viewingTenant.status || 'active'
                   })
                 });
                 toast.success('แก้ไขข้อมูลสำเร็จ');
@@ -195,6 +196,14 @@ export default function TenantsPage() {
               <div>
                 <label className="text-sm font-medium text-muted-foreground">{t('phone')}</label>
                 <input value={viewingTenant.user?.phone || ''} onChange={e => setViewingTenant({...viewingTenant, user: {...viewingTenant.user, phone: e.target.value}})} className="w-full mt-1 border rounded-md px-3 py-2 bg-background" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">{t('status')}</label>
+                <select value={viewingTenant.status || 'active'} onChange={e => setViewingTenant({...viewingTenant, status: e.target.value})} className="w-full mt-1 border rounded-md px-3 py-2 bg-background">
+                  <option value="active">{t('active') || 'กำลังเช่า'}</option>
+                  <option value="moving_out">แจ้งย้ายออก</option>
+                  <option value="inactive">{t('inactive') || 'ไม่ได้เช่า'}</option>
+                </select>
               </div>
               <div className="flex justify-end gap-2 pt-6">
                 <Button type="button" variant="ghost" onClick={() => setViewingTenant(null)}>{t('cancel')}</Button>
@@ -253,11 +262,11 @@ export default function TenantsPage() {
                       <span className="flex flex-col">
                         <span className="font-medium text-base">{tenant.user?.first_name} {tenant.user?.last_name}</span>
                         <span className={`w-fit mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                          tenant.status === 'active' ? 'bg-green-100 text-green-700' : 
+                          (tenant.status || 'active') === 'active' ? 'bg-green-100 text-green-700' : 
                           tenant.status === 'moving_out' ? 'bg-purple-100 text-purple-700 ring-1 ring-purple-300' :
                           'bg-orange-100 text-orange-700'
                         }`}>
-                          {tenant.status === 'active' ? (t('active') || 'กำลังเช่า') : 
+                          {(tenant.status || 'active') === 'active' ? (t('active') || 'กำลังเช่า') : 
                            tenant.status === 'moving_out' ? 'แจ้งย้ายออก' : 
                            (t('inactive') || 'ไม่ได้เช่า')}
                         </span>

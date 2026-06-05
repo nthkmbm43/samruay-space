@@ -27,7 +27,9 @@ exports.createPromotion = async (req, res) => {
     let image_url = null;
 
     if (req.file) {
-      image_url = `/uploads/promotions/${req.file.filename}`;
+      const fileData = fs.readFileSync(req.file.path);
+      const base64Data = fileData.toString('base64');
+      image_url = `data:${req.file.mimetype};base64,${base64Data}`;
     }
 
     const properties = await Property.findAll({ limit: 1 });

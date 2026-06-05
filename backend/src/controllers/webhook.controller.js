@@ -422,7 +422,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         });
 
       case 'เสกบิล':
-        const roomPrice = parseFloat(tenant.Room?.price_override || 1500);
+        const roomPrice = parseFloat(tenant.room?.price_override || 1500);
         
         // Fetch rates from settings
         const { Setting, MeterReading } = require('../models');
@@ -464,8 +464,8 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           if (!existingInvoice) {
             try {
               await Invoice.create({
-                invoice_number: `INV-${reading.period_year}${String(reading.period_month).padStart(2, '0')}-${tenant.Room?.room_number || tenant.room_id}`,
-                property_id: tenant.Room?.property_id || 1,
+                invoice_number: `INV-${reading.period_year}${String(reading.period_month).padStart(2, '0')}-${tenant.room?.room_number || tenant.room_id}`,
+                property_id: tenant.room?.property_id || 1,
                 room_id: tenant.room_id,
                 tenant_id: tenant.id,
                 period_month: reading.period_month,
