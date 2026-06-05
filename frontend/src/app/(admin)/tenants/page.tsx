@@ -15,6 +15,7 @@ export default function TenantsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [rooms, setRooms] = useState([]);
   const [viewingTenant, setViewingTenant] = useState<any>(null);
+  const [deletingTenantId, setDeletingTenantId] = useState<number | null>(null);
 
   // Form state
   const [firstName, setFirstName] = useState('');
@@ -69,15 +70,20 @@ export default function TenantsPage() {
     }
   };
 
-  const handleDeleteTenant = async (id: number) => {
-    if (!confirm(t('confirmDelete') || 'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลนี้?')) return;
+  const confirmDelete = async () => {
+    if (!deletingTenantId) return;
     try {
-      await fetchApi(`/tenants/${id}`, { method: 'DELETE' });
+      await fetchApi(`/tenants/${deletingTenantId}`, { method: 'DELETE' });
       toast.success(t('tenantDeleted') || 'ลบข้อมูลสำเร็จ');
+      setDeletingTenantId(null);
       loadData();
     } catch (err: any) {
       toast.error(err.message);
     }
+  };
+
+  const handleDeleteTenant = (id: number) => {
+    setDeletingTenantId(id);
   };
 
   return (
@@ -198,6 +204,24 @@ export default function TenantsPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deletingTenantId && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl p-6 w-full max-w-sm shadow-lg border">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold">ยืนยันการลบข้อมูล</h3>
+              <p className="text-sm text-muted-foreground">{t('confirmDelete') || 'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลนี้?'}</p>
+              <div className="flex w-full justify-center gap-3 pt-4">
+                <Button variant="outline" className="flex-1" onClick={() => setDeletingTenantId(null)}>{t('cancel')}</Button>
+                <Button variant="destructive" className="flex-1" onClick={confirmDelete}>{t('deleteBtn') || 'ลบข้อมูล'}</Button>
+              </div>
+            </div>
           </div>
         </div>
       )}
