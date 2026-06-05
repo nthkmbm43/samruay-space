@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const { User, Tenant, Room } = require('../models');
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -103,6 +103,52 @@ exports.register = async (req, res) => {
     });
   } catch (error) {
     console.error('Register error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.registerTenant = async (req, res) => {
+  try {
+    const { line_uid, first_name, last_name, phone, room_id } = req.body;
+    
+    if (!line_uid || !first_name || !last_name || !phone || !room_id) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    // Check if user already exists
+    let user = await User.findOne({ where: { line_user_id: line_uid } });
+    if (!user) {
+      user = await User.create({
+        first_name,
+        last_name,
+        phone,
+        line_user_id: line_uid,
+        role: 'tenant'
+      });
+    }
+
+    // Create tenant record
+    const tenant = await Tenant.create({
+      user_id: user.id,
+      room_id: room_id
+    });
+
+    // Update room status
+    const room = await Room.findByPk(room_id);
+    if (room) {
+      room.status = 'occupied';
+      await room.save();
+    }
+
+    const token = generateToken(user);
+
+    res.status(201).json({
+      message: 'Registration successful',
+      token,
+      tenant
+    });
+  } catch (error) {
+    console.error('Register Tenant error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
