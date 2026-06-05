@@ -38,9 +38,9 @@ export function NotificationDropdown() {
             ทำเครื่องหมายว่าอ่านแล้ว
           </span>
         </div>
-        <DropdownMenuGroup className="max-h-80 overflow-y-auto">
+        <div className="max-h-80 overflow-y-auto">
           {notifications.map((notif) => (
-            <DropdownMenuItem key={notif.id} className="flex flex-col items-start p-3 cursor-pointer gap-1">
+            <div key={notif.id} className="flex flex-col items-start p-3 cursor-pointer gap-1 hover:bg-muted/50 border-b border-border/50">
               <div className="flex w-full justify-between items-start gap-2">
                 <span className={`text-sm font-medium ${notif.unread ? 'text-foreground' : 'text-muted-foreground'}`}>
                   {notif.title}
@@ -48,13 +48,12 @@ export function NotificationDropdown() {
                 {notif.unread && <span className="h-2 w-2 rounded-full bg-primary shrink-0 mt-1.5" />}
               </div>
               <span className="text-xs text-muted-foreground">{notif.time}</span>
-            </DropdownMenuItem>
+            </div>
           ))}
           {notifications.length === 0 && (
             <div className="p-4 text-center text-sm text-muted-foreground">ไม่มีการแจ้งเตือนใหม่</div>
           )}
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
+        </div>
         <div className="p-2">
           <Button variant="ghost" className="w-full text-sm h-8" size="sm">
             ดูการแจ้งเตือนทั้งหมด
