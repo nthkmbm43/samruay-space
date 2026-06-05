@@ -238,7 +238,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         const latestBill = await Invoice.findOne({ 
           where: { 
             tenant_id: tenant.id,
-            type: { [Op.in]: ['rent', 'other'] } 
+            invoice_number: { [Op.notLike]: 'BK-%' } 
           }, 
           order: [['created_at', 'DESC']],
           include: [{ model: Room, as: 'Room' }]
@@ -378,7 +378,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
 
       case 'ขอ QR Code สแกนจ่าย':
         const billForQr = await Invoice.findOne({ 
-          where: { tenant_id: tenant.id, status: 'pending', type: { [Op.in]: ['rent', 'other'] } }, 
+          where: { tenant_id: tenant.id, status: 'pending', invoice_number: { [Op.notLike]: 'BK-%' } }, 
           order: [['created_at', 'DESC']]
         });
         
