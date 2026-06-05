@@ -234,9 +234,14 @@ export default function BillingPage() {
                     {inv.status === 'awaiting_verification' ? (
                       <Button size="sm" onClick={() => openVerifyModal(inv)} className="bg-blue-600 hover:bg-blue-700">ตรวจสลิป</Button>
                     ) : inv.Payments && inv.Payments.length > 0 ? (
-                      <Button variant="ghost" size="sm" onClick={() => openVerifyModal(inv)}>ดูสลิป</Button>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => openVerifyModal(inv)}>ดูสลิป</Button>
+                        {inv.pdf_url && <Button variant="ghost" size="sm" onClick={() => window.open(process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') + inv.pdf_url, '_blank')}>ดูบิล</Button>}
+                      </div>
                     ) : (
-                      <Button variant="ghost" size="sm" className="h-8">ดูรายละเอียด</Button>
+                      <Button variant="ghost" size="sm" className="h-8" onClick={() => inv.pdf_url ? window.open(process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') + inv.pdf_url, '_blank') : openVerifyModal(inv)}>
+                        ดูรายละเอียด
+                      </Button>
                     )}
                   </td>
                 </tr>

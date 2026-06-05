@@ -237,10 +237,13 @@ export default function RoomsPage() {
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
                       room.status === 'available' ? 'bg-green-100 text-green-700' :
                       room.status === 'occupied' ? 'bg-blue-100 text-blue-700' :
+                      room.status === 'reserved' ? 'bg-purple-100 text-purple-700' :
                       'bg-orange-100 text-orange-700'
                     }`}>
-                      {room.status === 'available' ? t('statusAvailable') : 
-                       room.status === 'occupied' ? t('statusOccupied') : t('statusMaintenance')}
+                      {room.status === 'available' ? t('statusAvailable') || 'ว่าง' : 
+                       room.status === 'occupied' ? t('statusOccupied') || 'มีผู้เช่า' : 
+                       room.status === 'reserved' ? 'จอง/รอตรวจสลิป' : 
+                       t('statusMaintenance') || 'ซ่อมบำรุง'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right flex justify-end gap-2">

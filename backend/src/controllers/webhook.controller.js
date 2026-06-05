@@ -153,7 +153,14 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         
         const successMsg = `ลงทะเบียน/จองห้องพักสำเร็จค่ะ!\n\nสรุปยอดชำระเงินเพื่อยืนยันการจอง (ค่าประกัน 1,000 บาท + ค่าเช่าล่วงหน้า 1 เดือน) เป็นจำนวนเงิน ${totalAmount.toLocaleString()} บาท ค่ะ\n\n🏦 ช่องทางการชำระเงิน:\nธนาคาร: กรุงไทย\nเลขที่บัญชี: 4373134715\nชื่อบัญชี: ธนกฤต หมู่บ้านม่วง\n\n⚠️ คำแนะนำ:\n\nหลังจากโอนเงินแล้ว รบกวน "ส่งรูปสลิป" กลับมาในแชทนี้ทันที เพื่อให้แอดมินตรวจสอบครับ\n\nหากมียอดโอนไม่ครบถ้วน หรือมีปัญหาในการชำระเงิน รบกวนแจ้ง ชื่อ-เลขห้อง ให้แอดมินทราบด้วยนะครับ\n\nขอบคุณที่ไว้วางใจใช้บริการหอพักแม่สำรวยครับ 🙏`;
         
-        return await replyText(replyToken, successMsg);
+        const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
+        return await client.replyMessage({
+          replyToken: replyToken,
+          messages: [
+            { type: 'text', text: successMsg },
+            { type: 'image', originalContentUrl: `${appUrl}/uploads/qr_code.jpg`, previewImageUrl: `${appUrl}/uploads/qr_code.jpg` }
+          ]
+        });
       }
 
       if (currentState.step === 'WAITING_MAINTENANCE_DETAIL') {
