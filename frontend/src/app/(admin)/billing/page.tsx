@@ -258,7 +258,7 @@ export default function BillingPage() {
             <div className="flex-1 bg-muted/30 rounded-lg border flex items-center justify-center p-2 min-h-[300px]">
               {selectedInvoice.Payments && selectedInvoice.Payments.length > 0 ? (
                 <img 
-                  src={`${process.env.NEXT_PUBLIC_API_URL}${selectedInvoice.Payments[0].slip_image}`} 
+                  src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${selectedInvoice.Payments[0].slip_image}`} 
                   alt="Slip" 
                   className="max-w-full max-h-[600px] object-contain rounded-md"
                 />
