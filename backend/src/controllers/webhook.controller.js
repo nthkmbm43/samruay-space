@@ -140,7 +140,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           total: totalAmount,
           status: 'pending',
           notes: 'ค่ามัดจำและค่าเช่าล่วงหน้า (จองห้อง)'
-        });
+        }).catch(err => console.error("Invoice create error:", err));
 
         const { Notification } = require('../models');
         await Notification.create({
@@ -246,6 +246,9 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           return await replyText(replyToken, `บิลค่าเช่ายอด: ${parseFloat(latestBill.total).toLocaleString()} บาท (สถานะ: ${latestBill.status})`);
         }
 
+      case 'แจ้งชำระเงิน':
+        return await replyText(replyToken, 'กรุณาส่งรูปภาพสลิปโอนเงิน หรือหลักฐานการชำระเงินเข้ามาในแชทนี้ได้เลยค่ะ ทางเราจะรีบตรวจสอบให้ทันทีครับ');
+
       case 'แจ้งซ่อม':
         chatState.set(lineUserId, { step: 'WAITING_MAINTENANCE_DETAIL', timestamp: Date.now() });
         return await replyText(replyToken, '🛠️ คุณต้องการแจ้งซ่อมเรื่องอะไรคะ?\n(พิมพ์รายละเอียดส่งมาในแชทนี้ได้เลยค่ะ เช่น แอร์ไม่เย็น, ท่อน้ำซึม)');
@@ -293,12 +296,11 @@ async function handleIncomingImage(lineUserId, messageId, replyToken) {
 
     // Download image from LINE as buffer
     const stream = await blobClient.getMessageContent(messageId);
-    const buffer = await new Promise((resolve, reject) => {
-      const chunks = [];
-      stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-      stream.on('error', reject);
-      stream.on('end', () => resolve(Buffer.concat(chunks)));
-    });
+    const chunks = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.from(chunk));
+    }
+    const buffer = Buffer.concat(chunks);
     
     const base64Image = `data:image/jpeg;base64,${buffer.toString('base64')}`;
 
