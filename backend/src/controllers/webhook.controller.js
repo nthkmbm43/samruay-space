@@ -286,11 +286,13 @@ async function handleIncomingImage(lineUserId, messageId, replyToken) {
 
     // Download image from LINE as buffer
     const stream = await client.getMessageContent(messageId);
-    const chunks = [];
-    for await (const chunk of stream) {
-      chunks.push(chunk);
-    }
-    const buffer = Buffer.concat(chunks);
+    const buffer = await new Promise((resolve, reject) => {
+      const chunks = [];
+      stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      stream.on('error', reject);
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+    
     const base64Image = `data:image/jpeg;base64,${buffer.toString('base64')}`;
 
     const { Payment } = require('../models');

@@ -233,7 +233,7 @@ export default function BillingPage() {
                   <td className="px-6 py-4 text-right">
                     {inv.status === 'awaiting_verification' ? (
                       <Button size="sm" onClick={() => openVerifyModal(inv)} className="bg-blue-600 hover:bg-blue-700">ตรวจสลิป</Button>
-                    ) : inv.Payments && inv.Payments.length > 0 ? (
+                    ) : (inv.Payments && inv.Payments.length > 0) || (inv.payments && inv.payments.length > 0) ? (
                       <div className="flex justify-end gap-2">
                         <Button variant="outline" size="sm" onClick={() => openVerifyModal(inv)}>ดูสลิป</Button>
                         {inv.pdf_url && <Button variant="ghost" size="sm" onClick={() => window.open(process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') + inv.pdf_url, '_blank')}>ดูบิล</Button>}
@@ -256,11 +256,11 @@ export default function BillingPage() {
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-background rounded-xl p-6 w-full max-w-2xl shadow-xl flex flex-col md:flex-row gap-6 max-h-[90vh] overflow-y-auto">
             <div className="flex-1 bg-muted/30 rounded-lg border flex items-center justify-center p-2 min-h-[300px]">
-              {selectedInvoice.Payments && selectedInvoice.Payments.length > 0 ? (
+              {(selectedInvoice.Payments && selectedInvoice.Payments.length > 0) || (selectedInvoice.payments && selectedInvoice.payments.length > 0) ? (
                 <img 
-                  src={selectedInvoice.Payments[0].slip_image?.startsWith('data:') 
-                    ? selectedInvoice.Payments[0].slip_image 
-                    : `${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace('/api', '')}${selectedInvoice.Payments[0].slip_image}`} 
+                  src={(selectedInvoice.Payments?.[0] || selectedInvoice.payments?.[0])?.slip_image?.startsWith('data:') 
+                    ? (selectedInvoice.Payments?.[0] || selectedInvoice.payments?.[0])?.slip_image 
+                    : `${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace('/api', '')}${(selectedInvoice.Payments?.[0] || selectedInvoice.payments?.[0])?.slip_image}`} 
                   alt="Slip" 
                   className="max-w-full max-h-[600px] object-contain rounded-md"
                 />
