@@ -33,137 +33,205 @@ exports.handleLineWebhook = async (req, res) => {
 
 async function handleIncomingText(lineUserId, text, replyToken) {
   try {
+    const isRegisterNew = text === 'ลงทะเบียนใหม่';
+    const isRoomInquiry = /จอง|จองห้อง|ห้องว่าง|ห้องไหนว่าง|จองห้องพัก/.test(text);
+
+    // --- Check User ---
     const user = await User.findOne({ where: { line_user_id: lineUserId } });
     const tenant = user ? await Tenant.findOne({ where: { user_id: user.id }, include: [{ model: Room, as: 'room' }] }) : null;
-
-    const bookingKeywords = ['จอง', 'จองห้อง', 'จองห้องพัก', 'ห้องว่าง', 'ห้องไหนว่าง', 'มีห้องว่างไหม'];
-    const isBookingQuery = bookingKeywords.some(kw => text.includes(kw)) && !text.startsWith('จองห้อง ');
-
-    // Helper function to show rooms
-    const showAvailableRooms = async (footerText) => {
-      const availableRooms = await Room.findAll({ where: { status: 'available' }, order: [['room_number', 'ASC']] });
-      if (availableRooms.length === 0) return await replyText(replyToken, 'ขออภัยครับ ขณะนี้ไม่มีห้องว่างเลยครับ กรุณาติดต่อแอดมิน');
-      const roomListStr = availableRooms.map(r => `🔹 ห้อง ${r.room_number}`).join('\n');
-      return await replyText(replyToken, `นี่คือห้องที่ว่างอยู่ตอนนี้ครับ:\n\n${roomListStr}\n\n${footerText}`);
-    };
 
     // --- State Machine ---
     const currentState = chatState.get(lineUserId);
     if (currentState) {
+      if (text === 'ยกเลิก') {
+        chatState.delete(lineUserId);
+        return await replyText(replyToken, 'ยกเลิกรายการปัจจุบันเรียบร้อยครับ');
+      }
+
       if (currentState.step === 'WAITING_REGISTER_NAME') {
-        const parts = text.trim().split(' ');
-        chatState.set(lineUserId, { step: 'WAITING_REGISTER_PHONE', data: { first_name: parts[0], last_name: parts.slice(1).join(' ') || '' }, timestamp: Date.now() });
-        return await replyText(replyToken, `รับทราบครับคุณ ${parts[0]}\nกรุณาพิมพ์ "เบอร์โทรศัพท์" ของคุณครับ (เช่น 0812345678)`);
+        const fullName = text.trim();
+        const parts = fullName.split(' ');
+        const first_name = parts[0];
+        const last_name = parts.slice(1).join(' ') || '';
+        
+        chatState.set(lineUserId, { 
+          step: 'WAITING_REGISTER_PHONE', 
+          data: { first_name, last_name },
+          timestamp: Date.now() 
+        });
+        return await replyText(replyToken, `รับทราบค่ะคุณ ${first_name}\nกรุณาพิมพ์ "เบอร์โทรศัพท์" ของคุณค่ะ (เช่น 0812345678)`);
       }
 
       if (currentState.step === 'WAITING_REGISTER_PHONE') {
         const phone = text.replace(/[^0-9]/g, '');
-        if (phone.length < 9) return await replyText(replyToken, 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง กรุณาพิมพ์ใหม่อีกครั้งครับ');
-        
-        chatState.set(lineUserId, { step: 'WAITING_REGISTER_ROOM', data: { ...currentState.data, phone }, timestamp: Date.now() });
-        return await showAvailableRooms('หากสนใจจอง กรุณาพิมพ์คำว่า "จองห้อง ตามด้วยเลขห้อง" ครับ (เช่น จองห้อง 101)');
+        if (phone.length < 9) {
+          return await replyText(replyToken, 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง กรุณาพิมพ์ใหม่อีกครั้งค่ะ');
+        }
+
+        chatState.set(lineUserId, {
+          step: 'WAITING_REGISTER_ROOM',
+          data: { ...currentState.data, phone },
+          timestamp: Date.now()
+        });
+
+        return await replyText(replyToken, `กรุณาพิมพ์ "เลขห้อง" ที่ต้องการจองค่ะ (เช่น 101)`);
       }
 
       if (currentState.step === 'WAITING_REGISTER_ROOM') {
-        if (!text.startsWith('จองห้อง')) return await replyText(replyToken, 'กรุณาพิมพ์คำว่า "จองห้อง ตามด้วยเลขห้อง" (เช่น จองห้อง 101) เพื่อยืนยันครับ หรือพิมพ์ "ยกเลิก"');
+        const roomNum = text.replace(/จองห้อง|จอง/g, '').trim();
+        const room = await Room.findOne({ where: { room_number: roomNum, status: 'available' } });
         
-        const roomNum = text.replace('จองห้อง', '').trim();
-        const room = await Room.findOne({ where: { room_number: roomNum, status: 'available' }, include: ['RoomType'] });
-        if (!room) return await replyText(replyToken, `ขออภัยครับ ไม่พบห้อง ${roomNum} หรือห้องนี้ไม่ว่างแล้ว กรุณาเลือกเลขห้องใหม่ครับ`);
+        if (!room) {
+          return await replyText(replyToken, `ขออภัยค่ะ ไม่พบห้อง ${roomNum} หรือห้องนี้ไม่ว่างแล้ว กรุณาเลือกเลขห้องใหม่ค่ะ`);
+        }
 
         // Execute Booking
         const { first_name, last_name, phone } = currentState.data;
-        let bookingUser = await User.findOne({ where: { phone } });
-        if (!bookingUser) bookingUser = await User.create({ first_name, last_name, phone, line_user_id: lineUserId, role: 'tenant' });
-        else { bookingUser.line_user_id = lineUserId; await bookingUser.save(); }
+        
+        let dbUser = await User.findOne({ where: { phone } });
+        if (!dbUser) {
+          dbUser = await User.create({
+            first_name,
+            last_name,
+            phone,
+            line_user_id: lineUserId,
+            role: 'tenant'
+          });
+        } else {
+          dbUser.line_user_id = lineUserId;
+          await dbUser.save();
+        }
 
-        const newTenant = await Tenant.create({ user_id: bookingUser.id, room_id: room.id });
+        const newTenant = await Tenant.create({ user_id: dbUser.id, room_id: room.id });
         room.status = 'reserved';
         await room.save();
 
         const deposit = 1000;
-        const advanceRent = parseFloat(room.price_override || (room.RoomType && room.RoomType.base_price) || 1500);
+        const advanceRent = parseFloat(room.price_override || 1500);
         const totalAmount = deposit + advanceRent;
 
         await Invoice.create({
-          invoice_number: `BK-${Date.now()}`, property_id: room.property_id, room_id: room.id, tenant_id: newTenant.id,
-          period_month: new Date().getMonth() + 1, period_year: new Date().getFullYear(),
-          due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), total: totalAmount, status: 'pending', notes: 'ค่ามัดจำและค่าเช่าล่วงหน้า (จองห้อง)'
+          invoice_number: `BK-${Date.now()}`,
+          property_id: room.property_id,
+          room_id: room.id,
+          tenant_id: newTenant.id,
+          period_month: new Date().getMonth() + 1,
+          period_year: new Date().getFullYear(),
+          due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days
+          total: totalAmount,
+          status: 'pending',
+          notes: 'ค่ามัดจำและค่าเช่าล่วงหน้า (จองห้อง)'
         });
 
         const { Notification } = require('../models');
-        await Notification.create({ title: 'จองห้องใหม่', message: `${first_name} ${last_name} จองห้อง ${room.room_number}`, type: 'registration', action_url: '/invoices' });
+        await Notification.create({
+          title: 'จองห้องใหม่',
+          message: `${first_name} ${last_name} จองห้อง ${room.room_number}`,
+          type: 'registration',
+          action_url: '/invoices'
+        });
 
         chatState.delete(lineUserId);
-        return await replyText(replyToken, `🎉 ยินดีด้วยครับ! คุณได้สิทธิ์จองห้อง ${room.room_number} เรียบร้อยแล้วครับ\n\nยอดที่ต้องชำระเพื่อยืนยันสิทธิ์ภายใน 3 วันคือ:\n- ค่าประกัน: 1,000 บาท\n- ค่าเช่าล่วงหน้า: ${advanceRent} บาท\nสรุปยอดชำระคือ ${totalAmount} บาท\n\nสามารถโอนเข้าบัญชีด้านล่างนี้ และแนบรูปสลิปส่งกลับมาในแชทได้เลยค่ะ\n\n🏦 ธนาคาร: กรุงไทย\nเลขที่บัญชี: 4373134715\nชื่อบัญชี: ธนกฤต หมู่บ้านม่วง`);
+        
+        const successMsg = `ลงทะเบียน/จองห้องพักสำเร็จค่ะ!\n\nสรุปยอดชำระเงินเพื่อยืนยันการจอง (ค่าประกัน 1,000 บาท + ค่าเช่าล่วงหน้า 1 เดือน) เป็นจำนวนเงิน ${totalAmount.toLocaleString()} บาท ค่ะ\n\n🏦 ช่องทางการชำระเงิน:\nธนาคาร: กรุงไทย\nเลขที่บัญชี: 4373134715\nชื่อบัญชี: ธนกฤต หมู่บ้านม่วง\n\n⚠️ คำแนะนำ:\n\nหลังจากโอนเงินแล้ว รบกวน "ส่งรูปสลิป" กลับมาในแชทนี้ทันที เพื่อให้แอดมินตรวจสอบครับ\n\nหากมียอดโอนไม่ครบถ้วน หรือมีปัญหาในการชำระเงิน รบกวนแจ้ง ชื่อ-เลขห้อง ให้แอดมินทราบด้วยนะครับ\n\nขอบคุณที่ไว้วางใจใช้บริการหอพักแม่สำรวยครับ 🙏`;
+        
+        return await replyText(replyToken, successMsg);
       }
 
       if (currentState.step === 'WAITING_MAINTENANCE_DETAIL') {
         chatState.delete(lineUserId);
-        await MaintenanceRequest.create({ property_id: tenant?.room?.property_id || 1, room_id: tenant?.room_id, tenant_id: tenant?.id, title: 'แจ้งซ่อมจาก LINE', description: text, status: 'pending', priority: 'medium' });
+        
+        await MaintenanceRequest.create({
+          property_id: tenant?.room?.property_id || 1,
+          room_id: tenant?.room_id,
+          tenant_id: tenant?.id,
+          title: 'แจ้งซ่อมจาก LINE',
+          description: text,
+          status: 'pending',
+          priority: 'medium'
+        });
+
         const { Notification } = require('../models');
-        await Notification.create({ title: 'แจ้งซ่อมใหม่', message: `ห้อง ${tenant?.room?.room_number || 'ไม่ทราบ'}: ${text.substring(0, 30)}...`, type: 'maintenance', action_url: '/maintenance' });
-        return await replyText(replyToken, '✅ รับเรื่องแจ้งซ่อมเรียบร้อยครับ ทางแอดมินจะรีบตรวจสอบและส่งช่างเข้าไปดำเนินการครับ (ระบบจะแจ้งเตือนเมื่อซ่อมเสร็จ)');
+        await Notification.create({
+          title: 'แจ้งซ่อมใหม่',
+          message: `ห้อง ${tenant?.room?.room_number || 'ไม่ทราบ'}: ${text.substring(0, 30)}...`,
+          type: 'maintenance',
+          action_url: '/maintenance'
+        });
+
+        return await replyText(replyToken, '✅ รับเรื่องแจ้งซ่อมเรียบร้อยครับ ทางแอดมินจะรีบตรวจสอบและส่งช่างเข้าไปดำเนินการครับ');
       }
+    } // End of State Machine
+
+    // If new registration requested
+    if (isRegisterNew) {
+      chatState.set(lineUserId, { step: 'WAITING_REGISTER_NAME', timestamp: Date.now() });
+      return await replyText(replyToken, 'ยินดีค่ะ! เพื่อเริ่มขั้นตอนการจองห้องพัก กรุณากรอกข้อมูลตามนี้ทีละขั้นตอนนะคะ:\n\nพิมพ์ ชื่อ-นามสกุล ของคุณค่ะ');
     }
 
-    if (text === 'ยกเลิก') {
-      chatState.delete(lineUserId);
-      return await replyText(replyToken, 'ยกเลิกรายการปัจจุบันเรียบร้อยครับ');
+    if (text.startsWith('ลงทะเบียน')) {
+      return await handleOldRegistrationLinking(lineUserId, text, replyToken);
     }
 
-    // --- Unregistered User Flow ---
-    if (!user) {
-      if (text === 'ลงทะเบียนใหม่') {
-        chatState.set(lineUserId, { step: 'WAITING_REGISTER_NAME', timestamp: Date.now() });
-        return await replyText(replyToken, 'ยินดีต้อนรับครับ! เพื่อความสะดวกรวดเร็ว\nกรุณาพิมพ์ "ชื่อ-นามสกุล" ของคุณครับ');
-      }
-      if (text.startsWith('ลงทะเบียน')) {
-        return await handleOldRegistrationLinking(lineUserId, text, replyToken);
-      }
-      if (isBookingQuery) {
-        return await showAvailableRooms("หากต้องการจองห้องพัก กรุณาพิมพ์คำว่า 'ลงทะเบียนใหม่' เพื่อดำเนินการครับ");
-      }
-      return await replyText(replyToken, 'คุณยังไม่ได้ลงทะเบียนครับ\nพิมพ์ "ลงทะเบียนใหม่" เพื่อเริ่มจองห้องพัก หรือพิมพ์ "ลงทะเบียน [เบอร์โทร]" เพื่อผูกบัญชีเดิมครับ');
-    }
-
-    // --- Registered User Flow ---
-    if (isBookingQuery) {
-      if (!tenant) {
-        chatState.set(lineUserId, { step: 'WAITING_REGISTER_ROOM', data: { first_name: user.first_name, last_name: user.last_name, phone: user.phone }, timestamp: Date.now() });
-        return await showAvailableRooms("คุณมีบัญชีอยู่แล้ว! หากต้องการจองห้อง กรุณาพิมพ์คำว่า 'จองห้อง ตามด้วยเลขห้อง' ครับ (เช่น จองห้อง 101)");
+    // Room inquiry
+    if (isRoomInquiry) {
+      if (tenant && tenant.room) {
+        return await replyText(replyToken, `ปัจจุบันคุณเข้าพักที่ ห้อง ${tenant.room.room_number} แล้วค่ะ\n\nหากต้องการสอบถามข้อมูลอื่นๆ สามารถเลือกเมนูใน Rich Menu หรือพิมพ์สั่งงานได้เลยนะคะ:\n\nดูบิล: ตรวจสอบยอดชำระเดือนนี้\nแจ้งซ่อม: แจ้งปัญหาต่างๆ\nข่าวสาร: ดูโปรโมชั่นล่าสุด\nแจ้งออก: ทำเรื่องคืนห้องพัก`);
       } else {
-        return await showAvailableRooms("คุณเป็นผู้เช่าอยู่แล้ว หากต้องการย้ายห้องหรือจองเพิ่ม กรุณาติดต่อแอดมินครับ");
+        const availableRooms = await Room.findAll({
+          where: { status: 'available' },
+          order: [['room_number', 'ASC']]
+        });
+
+        if (availableRooms.length === 0) {
+          return await replyText(replyToken, 'ขออภัยค่ะ ขณะนี้ไม่มีห้องว่างเลยค่ะ');
+        }
+
+        const roomListStr = availableRooms.map(r => `ห้อง ${r.room_number}: ราคา ${parseFloat(r.price_override || 1500).toLocaleString()} บาท/เดือน`).join('\n\n');
+        
+        return await replyText(replyToken, `ยินดีต้อนรับสู่หอพักแม่สำรวยค่ะ 😊\n\nตอนนี้มีห้องว่างที่พร้อมเข้าอยู่ดังนี้ค่ะ:\n\n${roomListStr}\n\nหากสนใจจองห้องพัก กรุณาพิมพ์คำว่า 'ลงทะเบียนใหม่' เพื่อเริ่มขั้นตอนการจองได้เลยค่ะ`);
       }
     }
 
-    // Menu Commands for Registered Users
+    // --- Menu Commands for Registered Users ---
+    if (!user || !tenant) {
+      return await replyText(replyToken, `ขออภัยค่ะ พอดีฉันไม่ค่อยเข้าใจคำสั่งนี้ ลองเลือกจากเมนูด้านล่าง หรือพิมพ์คำว่า 'จองห้อง' เพื่อดูห้องว่างได้เลยนะคะ`);
+    }
+
     switch (text) {
-      case 'หน้าหลัก': return await replyText(replyToken, `สวัสดีครับคุณ ${user.first_name}\nหากต้องการแจ้งซ่อม ส่งสลิป หรือขอย้ายออก สามารถพิมพ์บอกในแชทนี้ได้เลยครับ`);
+      case 'หน้าหลัก':
+        return await replyText(replyToken, `สวัสดีค่ะคุณ ${user.first_name}\nหากต้องการแจ้งซ่อม ส่งสลิป หรือขอย้ายออก สามารถพิมพ์บอกในแชทนี้ได้เลยนะคะ`);
+
       case 'ดูบิล':
       case 'ค่าเช่า':
-        if (!tenant) return await replyText(replyToken, 'ไม่พบข้อมูลห้องพักของคุณครับ');
-        const latestBill = await Invoice.findOne({ where: { tenant_id: tenant.id }, order: [['created_at', 'DESC']] });
-        if (!latestBill) return await replyText(replyToken, 'คุณยังไม่มีบิลค่าเช่าในระบบครับ');
+        const latestBill = await Invoice.findOne({ 
+          where: { tenant_id: tenant.id }, order: [['created_at', 'DESC']]
+        });
+        
+        if (!latestBill) return await replyText(replyToken, 'คุณยังไม่มีบิลค่าเช่าในระบบค่ะ');
+        
         if (latestBill.pdf_url) {
           const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
-          return await replyText(replyToken, `บิลค่าเช่าเดือนล่าสุดยอด: ${latestBill.total} บาท\nสถานะ: ${latestBill.status}\n\nคลิกเพื่อดูใบแจ้งหนี้ PDF:\n${appUrl}${latestBill.pdf_url}`);
+          return await replyText(replyToken, `บิลค่าเช่ายอด: ${parseFloat(latestBill.total).toLocaleString()} บาท\nสถานะ: ${latestBill.status}\n\nคลิกเพื่อดูใบแจ้งหนี้:\n${appUrl}${latestBill.pdf_url}`);
         } else {
-          return await replyText(replyToken, `บิลค่าเช่ายอด: ${latestBill.total} บาท (สถานะ: ${latestBill.status})`);
+          return await replyText(replyToken, `บิลค่าเช่ายอด: ${parseFloat(latestBill.total).toLocaleString()} บาท (สถานะ: ${latestBill.status})`);
         }
+
       case 'แจ้งซ่อม':
         chatState.set(lineUserId, { step: 'WAITING_MAINTENANCE_DETAIL', timestamp: Date.now() });
-        return await replyText(replyToken, '🛠️ คุณต้องการแจ้งซ่อมเรื่องอะไรครับ?\n(พิมพ์รายละเอียดส่งมาในแชทนี้ได้เลยครับ เช่น แอร์ไม่เย็น, ท่อน้ำซึม)');
+        return await replyText(replyToken, '🛠️ คุณต้องการแจ้งซ่อมเรื่องอะไรคะ?\n(พิมพ์รายละเอียดส่งมาในแชทนี้ได้เลยค่ะ เช่น แอร์ไม่เย็น, ท่อน้ำซึม)');
+
       case 'ข่าวสาร':
         const promo = await Promotion.findOne({ order: [['created_at', 'DESC']] });
         if (promo) return await replyText(replyToken, `📣 ข่าวสาร/โปรโมชั่นล่าสุด:\n${promo.name}\n${promo.description || ''}`);
-        return await replyText(replyToken, 'ไม่มีข่าวสารใหม่ในขณะนี้ครับ');
+        return await replyText(replyToken, 'ไม่มีข่าวสารใหม่ในขณะนี้ค่ะ');
+
       case 'แจ้งออก':
       case 'แจ้งย้ายออก':
-        return await replyText(replyToken, '📝 ได้รับเรื่องแจ้งย้ายออกแล้วครับ แอดมินจะเข้าไปตรวจสอบความเรียบร้อยของห้อง และจะส่ง [บิลสรุปยอดสุทธิพร้อมเงินประกันคืน] กลับมาให้ในแชทนี้อีกครั้งนะครับ');
+        return await replyText(replyToken, '📝 ได้รับเรื่องแจ้งย้ายออกแล้วค่ะ แอดมินจะเข้าไปตรวจสอบความเรียบร้อยของห้อง และจะส่ง [บิลสรุปยอดสุทธิพร้อมเงินประกันคืน] กลับมาให้ในแชทนี้นะคะ');
+
       default:
-        // Default only triggers if it's an unrecognized command
-        return await replyText(replyToken, 'หากต้องการชำระเงิน กรุณาส่งรูปสลิปมาในแชทนี้ได้เลยครับ\nหรือพิมพ์เมนูที่ต้องการ (จองห้องพัก, ดูบิล, แจ้งซ่อม, ข่าวสาร, แจ้งออก)');
+        return await replyText(replyToken, `ขออภัยค่ะ พอดีฉันไม่ค่อยเข้าใจคำสั่งนี้ ลองเลือกจากเมนูด้านล่าง หรือส่งรูปสลิปเพื่อชำระเงินได้เลยนะคะ`);
     }
   } catch (error) {
     console.error('Error handling text:', error);
