@@ -45,7 +45,36 @@ exports.getRoomById = async (req, res) => {
 
 exports.createRoom = async (req, res) => {
   try {
-    const newRoom = await Room.create(req.body);
+    const { room_number, room_type, base_price, floor_number, property_id, price_override } = req.body;
+    
+    let floor_id = null;
+    let room_type_id = null;
+
+    if (property_id && floor_number) {
+      const [floor] = await Floor.findOrCreate({
+        where: { property_id, floor_number },
+        defaults: { name: `ชั้น ${floor_number}` }
+      });
+      floor_id = floor.id;
+    }
+
+    if (property_id && room_type) {
+      const [rType] = await RoomType.findOrCreate({
+        where: { property_id, name: room_type },
+        defaults: { base_price: base_price || 0 }
+      });
+      room_type_id = rType.id;
+    }
+
+    const newRoom = await Room.create({
+      room_number,
+      property_id,
+      floor_id,
+      room_type_id,
+      price_override: price_override || base_price || 0,
+      ...req.body
+    });
+
     res.status(201).json(newRoom);
   } catch (error) {
     console.error('Create room error:', error);
