@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
+const path = require('path');
 require('dotenv').config({ path: '../.env' }); // Load .env from root
 
 const sequelize = require('./src/config/database');
@@ -19,12 +20,19 @@ app.use('/webhooks', webhookRoutes);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve static files for uploads and pdfs
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/pdfs', express.static(path.join(__dirname, 'pdfs')));
+
 // Routes
 const authRoutes = require('./src/routes/auth.routes');
 const propertyRoutes = require('./src/routes/property.routes');
 const roomRoutes = require('./src/routes/room.routes');
 const tenantRoutes = require('./src/routes/tenant.routes');
 const billingRoutes = require('./src/routes/billing.routes');
+const maintenanceRoutes = require('./src/routes/maintenance.routes');
+const settingRoutes = require('./src/routes/setting.routes');
+const notificationRoutes = require('./src/routes/notification.routes');
 
 // Basic Route
 app.get('/', (req, res) => {
@@ -37,8 +45,9 @@ app.use('/api/properties', propertyRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/tenants', tenantRoutes);
 app.use('/api/billing', billingRoutes);
-app.use('/api/maintenance', require('./src/routes/maintenance.routes'));
-app.use('/api/settings', require('./src/routes/setting.routes'));
+app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/settings', settingRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Sync Database and Start Server
 const PORT = process.env.PORT || 3001;
@@ -51,6 +60,9 @@ async function startServer() {
     // Sync models
     require('./src/models');
     await sequelize.sync({ alter: true });
+    
+    // Start Cron Jobs
+    require('./src/jobs/cancelReservation');
     
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);

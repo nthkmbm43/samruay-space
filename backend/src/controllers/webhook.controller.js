@@ -94,7 +94,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         }
         
         const roomNum = text.replace('จองห้อง', '').trim();
-        const room = await Room.findOne({ where: { room_number: roomNum, status: 'available' } });
+        const room = await Room.findOne({ where: { room_number: roomNum, status: 'available' }, include: ['RoomType'] });
         
         if (!room) {
           return await replyText(replyToken, `ขออภัยครับ ไม่พบห้อง ${roomNum} หรือห้องนี้ไม่ว่างแล้ว กรุณาเลือกเลขห้องใหม่ครับ`);
@@ -117,12 +117,37 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           await user.save();
         }
 
-        await Tenant.create({ user_id: user.id, room_id: room.id });
-        room.status = 'occupied';
+        const tenant = await Tenant.create({ user_id: user.id, room_id: room.id });
+        room.status = 'reserved';
         await room.save();
 
+        const deposit = 1000;
+        const advanceRent = parseFloat(room.price_override || (room.RoomType && room.RoomType.base_price) || 1500);
+        const totalAmount = deposit + advanceRent;
+
+        await Invoice.create({
+          invoice_number: `BK-${Date.now()}`,
+          property_id: room.property_id,
+          room_id: room.id,
+          tenant_id: tenant.id,
+          period_month: new Date().getMonth() + 1,
+          period_year: new Date().getFullYear(),
+          due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days
+          total: totalAmount,
+          status: 'pending',
+          notes: 'ค่ามัดจำและค่าเช่าล่วงหน้า (จองห้อง)'
+        });
+
+        const { Notification } = require('../models');
+        await Notification.create({
+          title: 'จองห้องใหม่',
+          message: `${first_name} ${last_name} จองห้อง ${room.room_number}`,
+          type: 'registration',
+          action_url: '/invoices'
+        });
+
         chatState.delete(lineUserId);
-        return await replyText(replyToken, `🎉 ยินดีด้วยครับ! คุณได้สิทธิ์จองห้อง ${room.room_number} เรียบร้อยแล้วครับ\nข้อมูลของคุณถูกบันทึกลงระบบแล้ว แอดมินจะติดต่อกลับไปในเร็วๆ นี้ครับ`);
+        return await replyText(replyToken, `🎉 ยินดีด้วยครับ! คุณได้สิทธิ์จองห้อง ${room.room_number} เรียบร้อยแล้วครับ\n\nยอดที่ต้องชำระเพื่อยืนยันสิทธิ์ภายใน 3 วันคือ:\n- ค่าประกัน: 1,000 บาท\n- ค่าเช่าล่วงหน้า: ${advanceRent} บาท\nรวมเป็นยอดสุทธิ: ${totalAmount} บาท\n\nสามารถโอนเงินและส่งรูปสลิปในแชทนี้ได้เลยครับ!`);
       }
 
       if (currentState.step === 'WAITING_MAINTENANCE_DETAIL') {
@@ -139,6 +164,14 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           description: text,
           status: 'pending',
           priority: 'medium'
+        });
+
+        const { Notification } = require('../models');
+        await Notification.create({
+          title: 'แจ้งซ่อมใหม่',
+          message: `ห้อง ${tenant?.room?.room_number || 'ไม่ทราบ'}: ${text.substring(0, 30)}...`,
+          type: 'maintenance',
+          action_url: '/maintenance'
         });
 
         return await replyText(replyToken, '✅ รับเรื่องแจ้งซ่อมเรียบร้อยครับ ทางแอดมินจะรีบตรวจสอบและส่งช่างเข้าไปดำเนินการครับ (ระบบจะแจ้งเตือนเมื่อซ่อมเสร็จ)');
@@ -196,7 +229,6 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         return await replyText(replyToken, '📝 ได้รับเรื่องแจ้งย้ายออกแล้วครับ แอดมินจะเข้าไปตรวจสอบความเรียบร้อยของห้อง และจะส่ง [บิลสรุปยอดสุทธิพร้อมเงินประกันคืน] กลับมาให้ในแชทนี้อีกครั้งนะครับ');
 
       default:
-        // Assume text might be asking something else, or fallback
         return await replyText(replyToken, 'หากต้องการชำระเงิน กรุณาส่งรูปสลิปมาในแชทนี้ได้เลยครับ\nหรือพิมพ์เมนูที่ต้องการ (ดูบิล, แจ้งซ่อม, ข่าวสาร, แจ้งออก)');
     }
   } catch (error) {
@@ -209,7 +241,7 @@ async function handleIncomingImage(lineUserId, messageId, replyToken) {
     const user = await User.findOne({ where: { line_user_id: lineUserId } });
     if (!user) return; // Ignore images from unregistered users
 
-    const tenant = await Tenant.findOne({ where: { user_id: user.id } });
+    const tenant = await Tenant.findOne({ where: { user_id: user.id }, include: [{ model: Room, as: 'room' }] });
     if (!tenant) return;
 
     // Find the latest pending invoice
@@ -222,14 +254,18 @@ async function handleIncomingImage(lineUserId, messageId, replyToken) {
       return await replyText(replyToken, 'คุณไม่มีบิลที่ต้องชำระในขณะนี้ครับ แต่เราบันทึกรูปภาพของคุณไว้แล้ว');
     }
 
-    // In a real app, download the image using line.messagingApiBlob.MessagingApiBlobClient
-    // and save it. For now, just mark the invoice as awaiting verification.
-    
-    pendingInvoice.status = 'paid'; // Or awaiting_verification
-    pendingInvoice.paid_at = new Date();
+    pendingInvoice.status = 'awaiting_verification';
     await pendingInvoice.save();
 
-    await replyText(replyToken, `✅ ได้รับสลิปชำระเงินเรียบร้อยแล้วครับ ระบบจะทำการอัปเดตสถานะบิลของคุณ (ยอด ${pendingInvoice.total} บาท) ให้ทันที ขอบคุณครับ!`);
+    const { Notification } = require('../models');
+    await Notification.create({
+      title: 'แนบสลิปชำระเงิน',
+      message: `ห้อง ${tenant.room?.room_number || 'ไม่ทราบ'} แนบสลิปยอด ${pendingInvoice.total} บาท รอการตรวจสอบ`,
+      type: 'payment',
+      action_url: '/invoices'
+    });
+
+    await replyText(replyToken, `✅ ได้รับสลิปชำระเงินเรียบร้อยแล้วครับ ระบบได้ส่งเรื่องให้แอดมินตรวจสอบยอด ${pendingInvoice.total} บาท\nรอแอดมินยืนยันสักครู่นะครับ!`);
 
   } catch (error) {
     console.error('Error handling image:', error);

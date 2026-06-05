@@ -13,6 +13,7 @@ const Invoice = require('./Invoice');
 const Payment = require('./Payment');
 const MaintenanceRequest = require('./MaintenanceRequest');
 const Setting = require('./Setting');
+const Notification = require('./Notification');
 
 module.exports = {
   sequelize,
@@ -28,5 +29,6 @@ module.exports = {
   Invoice,
   Payment,
   MaintenanceRequest,
-  Setting
+  Setting,
+  Notification
 };
