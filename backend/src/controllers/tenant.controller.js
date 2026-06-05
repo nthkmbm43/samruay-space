@@ -77,3 +77,21 @@ exports.updateTenant = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+exports.deleteTenant = async (req, res) => {
+  try {
+    const tenant = await Tenant.findByPk(req.params.id);
+    if (!tenant) {
+      return res.status(404).json({ message: 'Tenant not found' });
+    }
+    
+    if (tenant.room_id) {
+      await Room.update({ status: 'available' }, { where: { id: tenant.room_id } });
+    }
+    
+    await tenant.destroy();
+    res.json({ message: 'Tenant deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

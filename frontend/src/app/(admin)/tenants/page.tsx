@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Plus, Search, User, Loader2 } from 'lucide-react';
+import { Plus, Search, User, Loader2, Trash2 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'react-hot-toast';
@@ -66,6 +66,17 @@ export default function TenantsPage() {
       toast.error(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteTenant = async (id: number) => {
+    if (!confirm(t('confirmDelete') || 'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลนี้?')) return;
+    try {
+      await fetchApi(`/tenants/${id}`, { method: 'DELETE' });
+      toast.success(t('tenantDeleted') || 'ลบข้อมูลสำเร็จ');
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message);
     }
   };
 
@@ -221,8 +232,11 @@ export default function TenantsPage() {
                   <td className="px-6 py-4 font-medium">{tenant.room ? `${tenant.room.room_number}` : t('unassigned')}</td>
                   <td className="px-6 py-4">{tenant.user?.phone}</td>
                   <td className="px-6 py-4">{tenant.user?.email}</td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-6 py-4 text-right flex justify-end gap-2">
                     <Button variant="ghost" size="sm" className="h-8" onClick={() => setViewingTenant(tenant)}>{t('manage')}</Button>
+                    <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteTenant(tenant.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </td>
                 </tr>
               ))}

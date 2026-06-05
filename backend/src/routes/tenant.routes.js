@@ -8,6 +8,7 @@ router.route('/')
   .post(protect, tenantController.createTenant);
 
 router.route('/:id')
-  .put(protect, tenantController.updateTenant);
+  .put(protect, tenantController.updateTenant)
+  .delete(protect, tenantController.deleteTenant);
 
 module.exports = router;

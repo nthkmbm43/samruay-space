@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { DoorOpen, Filter, Plus, Search, Loader2 } from 'lucide-react';
+import { DoorOpen, Filter, Plus, Search, Loader2, Trash2 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'react-hot-toast';
@@ -66,6 +66,17 @@ export default function RoomsPage() {
       toast.error(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteRoom = async (id: number) => {
+    if (!confirm(t('confirmDelete') || 'คุณแน่ใจหรือไม่ว่าต้องการลบห้องพักนี้?')) return;
+    try {
+      await fetchApi(`/rooms/${id}`, { method: 'DELETE' });
+      toast.success(t('roomDeleted') || 'ลบห้องพักสำเร็จ');
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message);
     }
   };
 
@@ -232,8 +243,11 @@ export default function RoomsPage() {
                        room.status === 'occupied' ? t('statusOccupied') : t('statusMaintenance')}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-6 py-4 text-right flex justify-end gap-2">
                     <Button variant="ghost" size="sm" className="h-8" onClick={() => setEditingRoom(room)}>{t('manage')}</Button>
+                    <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteRoom(room.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </td>
                 </tr>
               ))}
