@@ -7,8 +7,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -34,13 +32,12 @@ export function NotificationDropdown() {
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-80" align="end" sideOffset={8}>
-        <DropdownMenuLabel className="flex justify-between items-center">
+        <div className="flex justify-between items-center px-3 py-2 text-sm font-semibold border-b">
           <span>{t('notifications') || 'การแจ้งเตือน'}</span>
           <span className="text-xs font-normal text-muted-foreground cursor-pointer hover:underline">
             ทำเครื่องหมายว่าอ่านแล้ว
           </span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
+        </div>
         <DropdownMenuGroup className="max-h-80 overflow-y-auto">
           {notifications.map((notif) => (
             <DropdownMenuItem key={notif.id} className="flex flex-col items-start p-3 cursor-pointer gap-1">
