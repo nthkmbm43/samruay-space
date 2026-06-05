@@ -40,6 +40,32 @@ app.get('/', (req, res) => {
   res.json({ message: 'Welcome to SAMRUAY SPACE API' });
 });
 
+app.get('/api/dev/clear-db', async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    const { Payment, Invoice, MeterReading, MaintenanceRequest, Notification, Contract, Tenant, Room, Floor, RoomType, Property, Promotion, User } = require('./src/models');
+    
+    await Payment.destroy({ where: {}, truncate: true, cascade: true });
+    await Invoice.destroy({ where: {}, truncate: true, cascade: true });
+    await MeterReading.destroy({ where: {}, truncate: true, cascade: true });
+    await MaintenanceRequest.destroy({ where: {}, truncate: true, cascade: true });
+    if (Notification) await Notification.destroy({ where: {}, truncate: true, cascade: true }).catch(() => {});
+    if (Contract) await Contract.destroy({ where: {}, truncate: true, cascade: true }).catch(() => {});
+    await Tenant.destroy({ where: {}, truncate: true, cascade: true });
+    await Room.destroy({ where: {}, truncate: true, cascade: true });
+    if (Floor) await Floor.destroy({ where: {}, truncate: true, cascade: true }).catch(() => {});
+    if (RoomType) await RoomType.destroy({ where: {}, truncate: true, cascade: true }).catch(() => {});
+    await Property.destroy({ where: {}, truncate: true, cascade: true });
+    await Promotion.destroy({ where: {}, truncate: true, cascade: true });
+    await User.destroy({ where: { role: { [Op.ne]: 'admin' } } });
+
+    res.json({ message: 'Production Database cleared successfully!' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/properties', propertyRoutes);
