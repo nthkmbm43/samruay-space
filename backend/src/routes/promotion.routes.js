@@ -23,6 +23,9 @@ router.route('/')
   .get(protect, authorize('super_admin', 'admin'), promotionController.getAllPromotions)
   .post(protect, authorize('super_admin', 'admin'), upload.single('image'), promotionController.createPromotion);
 
+router.route('/image/:id')
+  .get(promotionController.serveImage);
+
 router.route('/:id')
   .delete(protect, authorize('super_admin', 'admin'), promotionController.deletePromotion);
 

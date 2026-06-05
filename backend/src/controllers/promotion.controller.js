@@ -74,6 +74,31 @@ exports.deletePromotion = async (req, res) => {
   }
 };
 
+exports.serveImage = async (req, res) => {
+  try {
+    const promotion = await Promotion.findByPk(req.params.id);
+    if (!promotion || !promotion.image_url || !promotion.image_url.startsWith('data:')) {
+      return res.status(404).send('Image not found');
+    }
+
+    // Parse data URI
+    const matches = promotion.image_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).send('Invalid image format');
+    }
+
+    const mimeType = matches[1];
+    const imageBuffer = Buffer.from(matches[2], 'base64');
+
+    res.set('Content-Type', mimeType);
+    res.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Error serving image:', error);
+    res.status(500).send('Server error');
+  }
+};
+
 exports.broadcastPromotion = async (req, res) => {
   try {
     const promotion = await Promotion.findByPk(req.params.id);
@@ -85,7 +110,7 @@ exports.broadcastPromotion = async (req, res) => {
     const messages = [];
 
     if (promotion.image_url) {
-      const imageUrl = `${appUrl}${promotion.image_url}`;
+      const imageUrl = `${appUrl}/api/promotions/image/${promotion.id}`;
       messages.push({
         type: 'image',
         originalContentUrl: imageUrl,
