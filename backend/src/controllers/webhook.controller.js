@@ -430,8 +430,8 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         let waterRate = 20;
         let elecRate = 8;
         settings.forEach(s => {
-          if (s.setting_key === 'water_rate' && s.setting_value) waterRate = parseFloat(s.setting_value);
-          if (s.setting_key === 'elec_rate' && s.setting_value) elecRate = parseFloat(s.setting_value);
+          if (s.key === 'water_rate' && s.value) waterRate = parseFloat(s.value);
+          if (s.key === 'elec_rate' && s.value) elecRate = parseFloat(s.value);
         });
 
         const month4WaterUnits = 5;
