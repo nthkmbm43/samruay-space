@@ -1,6 +1,7 @@
 const line = require('@line/bot-sdk');
 const fs = require('fs');
 const path = require('path');
+const { Op } = require('sequelize');
 const { User, Tenant, Room, Invoice, MaintenanceRequest, Promotion } = require('../models');
 const pdfService = require('../services/pdf.service');
 
@@ -235,17 +236,171 @@ async function handleIncomingText(lineUserId, text, replyToken) {
       case 'ดูบิล':
       case 'ค่าเช่า':
         const latestBill = await Invoice.findOne({ 
-          where: { tenant_id: tenant.id }, order: [['created_at', 'DESC']]
+          where: { 
+            tenant_id: tenant.id,
+            type: { [Op.in]: ['rent', 'other'] } 
+          }, 
+          order: [['created_at', 'DESC']],
+          include: [{ model: Room, as: 'Room' }]
         });
         
-        if (!latestBill) return await replyText(replyToken, 'คุณยังไม่มีบิลค่าเช่าในระบบค่ะ');
+        if (!latestBill) return await replyText(replyToken, 'คุณยังไม่มีบิลค่าเช่ารายเดือนในระบบค่ะ');
+
+        const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
+        const promptPayNumber = process.env.PROMPTPAY_NUMBER || '0812345678';
+        const qrUrl = `https://promptpay.io/${promptPayNumber}/${latestBill.total}.png`;
+
+        const invoiceFlex = {
+          type: "flex",
+          altText: `บิลค่าเช่าเดือน ${latestBill.month}/${latestBill.year}`,
+          contents: {
+            type: "bubble",
+            header: {
+              type: "box",
+              layout: "vertical",
+              contents: [
+                {
+                  type: "text",
+                  text: "บิลเงินสด / ใบแจ้งหนี้",
+                  weight: "bold",
+                  color: "#1DB446",
+                  size: "xl",
+                  align: "center"
+                },
+                {
+                  type: "text",
+                  text: `ห้อง ${latestBill.Room?.room_number || '-'} | รอบบิล ${latestBill.month}/${latestBill.year}`,
+                  size: "md",
+                  color: "#aaaaaa",
+                  align: "center",
+                  margin: "sm"
+                }
+              ]
+            },
+            body: {
+              type: "box",
+              layout: "vertical",
+              contents: [
+                { type: "separator", margin: "xxl" },
+                {
+                  type: "box", layout: "horizontal", margin: "xxl",
+                  contents: [
+                    { type: "text", text: "ค่าเช่าห้อง", size: "sm", color: "#555555" },
+                    { type: "text", text: `${parseFloat(latestBill.room_rate || 0).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
+                  ]
+                },
+                {
+                  type: "box", layout: "horizontal", margin: "md",
+                  contents: [
+                    { type: "text", text: `ค่าน้ำ (${latestBill.water_usage} หน่วย)`, size: "sm", color: "#555555" },
+                    { type: "text", text: `${parseFloat(latestBill.water_cost || 0).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
+                  ]
+                },
+                {
+                  type: "box", layout: "horizontal", margin: "md",
+                  contents: [
+                    { type: "text", text: `ค่าไฟ (${latestBill.electric_usage} หน่วย)`, size: "sm", color: "#555555" },
+                    { type: "text", text: `${parseFloat(latestBill.electric_cost || 0).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
+                  ]
+                },
+                ...(parseFloat(latestBill.common_fee) > 0 ? [{
+                  type: "box", layout: "horizontal", margin: "md",
+                  contents: [
+                    { type: "text", text: "ค่าส่วนกลาง", size: "sm", color: "#555555" },
+                    { type: "text", text: `${parseFloat(latestBill.common_fee).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
+                  ]
+                }] : []),
+                { type: "separator", margin: "xxl" },
+                {
+                  type: "box", layout: "horizontal", margin: "xxl",
+                  contents: [
+                    { type: "text", text: "ยอดรวมทั้งสิ้น", size: "md", color: "#555555" },
+                    { type: "text", text: `${parseFloat(latestBill.total).toLocaleString()} ฿`, size: "lg", color: "#ff0000", weight: "bold", align: "end" }
+                  ]
+                },
+                {
+                  type: "box", layout: "horizontal", margin: "md",
+                  contents: [
+                    { type: "text", text: "สถานะ", size: "sm", color: "#555555" },
+                    { type: "text", text: latestBill.status === 'paid' ? '✅ ชำระแล้ว' : '❌ ยังไม่ชำระ', size: "sm", color: latestBill.status === 'paid' ? "#1DB446" : "#ff0000", weight: "bold", align: "end" }
+                  ]
+                }
+              ]
+            },
+            footer: {
+              type: "box",
+              layout: "vertical",
+              contents: [
+                ...(latestBill.status !== 'paid' ? [
+                  {
+                    type: "button",
+                    style: "primary",
+                    color: "#1DB446",
+                    margin: "sm",
+                    action: {
+                      type: "message",
+                      label: "สแกน QR จ่ายเงิน",
+                      text: "ขอ QR Code สแกนจ่าย"
+                    }
+                  },
+                  {
+                    type: "button",
+                    style: "secondary",
+                    margin: "sm",
+                    action: {
+                      type: "message",
+                      label: "แจ้งชำระเงิน (ส่งสลิป)",
+                      text: "แจ้งชำระเงิน"
+                    }
+                  }
+                ] : []),
+                ...(latestBill.pdf_url ? [
+                  {
+                    type: "button",
+                    style: "link",
+                    margin: "sm",
+                    action: {
+                      type: "uri",
+                      label: "ดาวน์โหลด PDF บิลเต็ม",
+                      uri: `${appUrl}${latestBill.pdf_url}`
+                    }
+                  }
+                ] : [])
+              ]
+            }
+          }
+        };
         
-        if (latestBill.pdf_url) {
-          const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
-          return await replyText(replyToken, `บิลค่าเช่ายอด: ${parseFloat(latestBill.total).toLocaleString()} บาท\nสถานะ: ${latestBill.status}\n\nคลิกเพื่อดูใบแจ้งหนี้:\n${appUrl}${latestBill.pdf_url}`);
-        } else {
-          return await replyText(replyToken, `บิลค่าเช่ายอด: ${parseFloat(latestBill.total).toLocaleString()} บาท (สถานะ: ${latestBill.status})`);
-        }
+        return await client.replyMessage({
+          replyToken: replyToken,
+          messages: [invoiceFlex]
+        });
+
+      case 'ขอ QR Code สแกนจ่าย':
+        const billForQr = await Invoice.findOne({ 
+          where: { tenant_id: tenant.id, status: 'pending', type: { [Op.in]: ['rent', 'other'] } }, 
+          order: [['created_at', 'DESC']]
+        });
+        
+        if (!billForQr) return await replyText(replyToken, 'คุณไม่มีบิลที่รอการชำระเงินค่ะ');
+        
+        const ppNumber = process.env.PROMPTPAY_NUMBER || '0812345678';
+        const generatedQrUrl = `https://promptpay.io/${ppNumber}/${billForQr.total}.png`;
+        
+        return await client.replyMessage({
+          replyToken: replyToken,
+          messages: [
+            {
+              type: 'image',
+              originalContentUrl: generatedQrUrl,
+              previewImageUrl: generatedQrUrl
+            },
+            {
+              type: 'text',
+              text: `สแกน QR Code เพื่อชำระยอด ${parseFloat(billForQr.total).toLocaleString()} บาท\nเมื่อโอนเสร็จแล้ว กดปุ่ม "แจ้งชำระเงิน" หรือพิมพ์ส่งรูปสลิปเข้ามาในแชทได้เลยค่ะ!`
+            }
+          ]
+        });
 
       case 'แจ้งชำระเงิน':
         return await replyText(replyToken, 'กรุณาส่งรูปภาพสลิปโอนเงิน หรือหลักฐานการชำระเงินเข้ามาในแชทนี้ได้เลยค่ะ ทางเราจะรีบตรวจสอบให้ทันทีครับ');
