@@ -424,6 +424,22 @@ async function handleIncomingText(lineUserId, text, replyToken) {
       case 'เสกบิล':
         const roomPrice = parseFloat(tenant.Room?.price_override || 1500);
         
+        // Fetch rates from settings
+        const { Setting } = require('../models');
+        const settings = await Setting.findAll();
+        let waterRate = 20;
+        let elecRate = 8;
+        settings.forEach(s => {
+          if (s.setting_key === 'water_rate' && s.setting_value) waterRate = parseFloat(s.setting_value);
+          if (s.setting_key === 'elec_rate' && s.setting_value) elecRate = parseFloat(s.setting_value);
+        });
+
+        const month4WaterUnits = 5;
+        const month4ElecUnits = 100;
+        const month4WaterAmount = month4WaterUnits * waterRate;
+        const month4ElecAmount = month4ElecUnits * elecRate;
+        const month4Total = roomPrice + month4WaterAmount + month4ElecAmount;
+
         // Month 4 (Paid)
         await Invoice.create({
           invoice_number: `INV-202604-${tenant.Room?.room_number || tenant.room_id}`,
@@ -435,11 +451,17 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           issue_date: new Date('2026-04-25'),
           due_date: new Date('2026-05-05'),
           room_price: roomPrice,
-          water_previous: 100, water_current: 105, water_units: 5, water_rate: 20, water_amount: 100,
-          elec_previous: 1000, elec_current: 1100, elec_units: 100, elec_rate: 8, elec_amount: 800,
-          subtotal: roomPrice + 100 + 800, total: roomPrice + 100 + 800,
+          water_previous: 100, water_current: 100 + month4WaterUnits, water_units: month4WaterUnits, water_rate: waterRate, water_amount: month4WaterAmount,
+          elec_previous: 1000, elec_current: 1000 + month4ElecUnits, elec_units: month4ElecUnits, elec_rate: elecRate, elec_amount: month4ElecAmount,
+          subtotal: month4Total, total: month4Total,
           status: 'paid', notes: 'บิลเดือนเมษายน 2026'
         }).catch(err => console.log('Mock Apr error:', err));
+
+        const month5WaterUnits = 7;
+        const month5ElecUnits = 150;
+        const month5WaterAmount = month5WaterUnits * waterRate;
+        const month5ElecAmount = month5ElecUnits * elecRate;
+        const month5Total = roomPrice + month5WaterAmount + month5ElecAmount;
 
         // Month 5 (Pending)
         await Invoice.create({
@@ -452,9 +474,9 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           issue_date: new Date('2026-05-25'),
           due_date: new Date('2026-06-05'),
           room_price: roomPrice,
-          water_previous: 105, water_current: 112, water_units: 7, water_rate: 20, water_amount: 140,
-          elec_previous: 1100, elec_current: 1250, elec_units: 150, elec_rate: 8, elec_amount: 1200,
-          subtotal: roomPrice + 140 + 1200, total: roomPrice + 140 + 1200,
+          water_previous: 100 + month4WaterUnits, water_current: 100 + month4WaterUnits + month5WaterUnits, water_units: month5WaterUnits, water_rate: waterRate, water_amount: month5WaterAmount,
+          elec_previous: 1000 + month4ElecUnits, elec_current: 1000 + month4ElecUnits + month5ElecUnits, elec_units: month5ElecUnits, elec_rate: elecRate, elec_amount: month5ElecAmount,
+          subtotal: month5Total, total: month5Total,
           status: 'pending', notes: 'บิลเดือนพฤษภาคม 2026'
         }).catch(err => console.log('Mock May error:', err));
         
