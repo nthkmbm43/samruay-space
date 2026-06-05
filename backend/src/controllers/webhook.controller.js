@@ -456,7 +456,8 @@ async function handleIncomingText(lineUserId, text, replyToken) {
             where: {
               room_id: tenant.room_id,
               period_month: reading.period_month,
-              period_year: reading.period_year
+              period_year: reading.period_year,
+              invoice_number: { [Op.notLike]: 'BK-%' }
             }
           });
 

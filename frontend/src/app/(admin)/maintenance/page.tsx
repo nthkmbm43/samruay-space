@@ -175,7 +175,12 @@ export default function MaintenancePage() {
                   onChange={e => setUpdateImage(e.target.files?.[0] || null)}
                   className="w-full mt-1 text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
+                {updateImage && (
+                  <div className="mt-4 aspect-video w-full rounded-lg overflow-hidden border">
+                    <img src={URL.createObjectURL(updateImage)} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground mt-2">
                   ภาพนี้จะถูกส่งแจ้งเตือนให้ลูกบ้านทาง LINE อัตโนมัติ (เช่น ภาพตอนซ่อมเสร็จ)
                 </p>
               </div>

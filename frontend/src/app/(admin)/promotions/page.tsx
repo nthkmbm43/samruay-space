@@ -153,6 +153,11 @@ export default function PromotionsPage() {
                 onChange={e => setImage(e.target.files?.[0] || null)}
                 className="w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
               />
+              {image && (
+                <div className="mt-4 aspect-video w-full max-w-sm rounded-lg overflow-hidden border">
+                  <img src={URL.createObjectURL(image)} alt="Preview" className="w-full h-full object-cover" />
+                </div>
+              )}
             </div>
             <div className="flex gap-2 justify-end pt-2">
               <button 
