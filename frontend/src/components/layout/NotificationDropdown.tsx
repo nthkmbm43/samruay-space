@@ -27,13 +27,11 @@ export function NotificationDropdown() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="w-5 h-5 text-muted-foreground" />
-          {unreadCount > 0 && (
-            <span className="absolute top-2 right-2.5 w-2 h-2 bg-primary rounded-full animate-pulse"></span>
-          )}
-        </Button>
+      <DropdownMenuTrigger className="relative inline-flex h-10 w-10 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground outline-none">
+        <Bell className="w-5 h-5 text-muted-foreground" />
+        {unreadCount > 0 && (
+          <span className="absolute top-2 right-2.5 block h-2 w-2 rounded-full bg-red-500 animate-pulse border border-background"></span>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-80" align="end" sideOffset={8}>
         <DropdownMenuLabel className="flex justify-between items-center">
