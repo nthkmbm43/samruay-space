@@ -425,7 +425,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         const roomPrice = parseFloat(tenant.Room?.price_override || 1500);
         
         // Fetch rates from settings
-        const { Setting } = require('../models');
+        const { Setting, MeterReading } = require('../models');
         const settings = await Setting.findAll();
         let waterRate = 20;
         let elecRate = 8;
@@ -434,53 +434,79 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           if (s.key === 'elec_rate' && s.value) elecRate = parseFloat(s.value);
         });
 
-        const month4WaterUnits = 5;
-        const month4ElecUnits = 100;
-        const month4WaterAmount = month4WaterUnits * waterRate;
-        const month4ElecAmount = month4ElecUnits * elecRate;
-        const month4Total = roomPrice + month4WaterAmount + month4ElecAmount;
+        // Fetch actual meter readings for this room
+        const readings = await MeterReading.findAll({ 
+          where: { room_id: tenant.room_id },
+          order: [['period_year', 'ASC'], ['period_month', 'ASC']]
+        });
 
-        // Month 4 (Paid)
-        await Invoice.create({
-          invoice_number: `INV-202604-${tenant.Room?.room_number || tenant.room_id}`,
-          property_id: tenant.Room?.property_id || 1,
-          room_id: tenant.room_id,
-          tenant_id: tenant.id,
-          period_month: 4,
-          period_year: 2026,
-          issue_date: new Date('2026-04-25'),
-          due_date: new Date('2026-05-05'),
-          room_price: roomPrice,
-          water_previous: 100, water_current: 100 + month4WaterUnits, water_units: month4WaterUnits, water_rate: waterRate, water_amount: month4WaterAmount,
-          elec_previous: 1000, elec_current: 1000 + month4ElecUnits, elec_units: month4ElecUnits, elec_rate: elecRate, elec_amount: month4ElecAmount,
-          subtotal: month4Total, total: month4Total,
-          status: 'paid', notes: 'บิลเดือนเมษายน 2026'
-        }).catch(err => console.log('Mock Apr error:', err));
+        if (readings.length === 0) {
+           return await replyText(replyToken, '❌ ไม่สามารถเสกบิลได้ เนื่องจากยังไม่มีการจดมิเตอร์น้ำ/ไฟสำหรับห้องของคุณในระบบ แอดมินต้องทำการจดมิเตอร์ก่อนค่ะ');
+        }
 
-        const month5WaterUnits = 7;
-        const month5ElecUnits = 150;
-        const month5WaterAmount = month5WaterUnits * waterRate;
-        const month5ElecAmount = month5ElecUnits * elecRate;
-        const month5Total = roomPrice + month5WaterAmount + month5ElecAmount;
+        let generatedCount = 0;
+        for (const reading of readings) {
+          const wUnits = parseFloat(reading.water_units || 0);
+          const eUnits = parseFloat(reading.elec_units || 0);
+          const wAmount = wUnits * waterRate;
+          const eAmount = eUnits * elecRate;
+          const totalAmount = roomPrice + wAmount + eAmount;
 
-        // Month 5 (Pending)
-        await Invoice.create({
-          invoice_number: `INV-202605-${tenant.Room?.room_number || tenant.room_id}`,
-          property_id: tenant.Room?.property_id || 1,
-          room_id: tenant.room_id,
-          tenant_id: tenant.id,
-          period_month: 5,
-          period_year: 2026,
-          issue_date: new Date('2026-05-25'),
-          due_date: new Date('2026-06-05'),
-          room_price: roomPrice,
-          water_previous: 100 + month4WaterUnits, water_current: 100 + month4WaterUnits + month5WaterUnits, water_units: month5WaterUnits, water_rate: waterRate, water_amount: month5WaterAmount,
-          elec_previous: 1000 + month4ElecUnits, elec_current: 1000 + month4ElecUnits + month5ElecUnits, elec_units: month5ElecUnits, elec_rate: elecRate, elec_amount: month5ElecAmount,
-          subtotal: month5Total, total: month5Total,
-          status: 'pending', notes: 'บิลเดือนพฤษภาคม 2026'
-        }).catch(err => console.log('Mock May error:', err));
+          const existingInvoice = await Invoice.findOne({
+            where: {
+              room_id: tenant.room_id,
+              period_month: reading.period_month,
+              period_year: reading.period_year
+            }
+          });
+
+          if (!existingInvoice) {
+            await Invoice.create({
+              invoice_number: `INV-${reading.period_year}${String(reading.period_month).padStart(2, '0')}-${tenant.Room?.room_number || tenant.room_id}`,
+              property_id: tenant.Room?.property_id || 1,
+              room_id: tenant.room_id,
+              tenant_id: tenant.id,
+              period_month: reading.period_month,
+              period_year: reading.period_year,
+              issue_date: new Date(),
+              due_date: new Date(new Date().setDate(new Date().getDate() + 5)),
+              room_price: roomPrice,
+              water_previous: reading.water_previous || 0, 
+              water_current: reading.water_current || 0, 
+              water_units: wUnits, 
+              water_rate: waterRate, 
+              water_amount: wAmount,
+              elec_previous: reading.elec_previous || 0, 
+              elec_current: reading.elec_current || 0, 
+              elec_units: eUnits, 
+              elec_rate: elecRate, 
+              elec_amount: eAmount,
+              subtotal: totalAmount, 
+              total: totalAmount,
+              status: 'pending', 
+              notes: `บิลเดือน ${reading.period_month}/${reading.period_year} (เสกบิลตามมิเตอร์จริง)`
+            }).catch(err => console.log('Mock generate error:', err));
+            generatedCount++;
+          } else {
+             // Update the invoice with new rates and units
+             existingInvoice.water_previous = reading.water_previous || 0;
+             existingInvoice.water_current = reading.water_current || 0;
+             existingInvoice.water_units = wUnits;
+             existingInvoice.water_rate = waterRate;
+             existingInvoice.water_amount = wAmount;
+             existingInvoice.elec_previous = reading.elec_previous || 0;
+             existingInvoice.elec_current = reading.elec_current || 0;
+             existingInvoice.elec_units = eUnits;
+             existingInvoice.elec_rate = elecRate;
+             existingInvoice.elec_amount = eAmount;
+             existingInvoice.subtotal = totalAmount;
+             existingInvoice.total = totalAmount;
+             await existingInvoice.save();
+             generatedCount++;
+          }
+        }
         
-        return await replyText(replyToken, '✨ เสกบิลจำลองของเดือน 4 และ 5 สำเร็จเรียบร้อยแล้วค่ะ!\n\nลองกดปุ่ม "ดูบิล / ค่าเช่า" อีกครั้งได้เลยค่ะ');
+        return await replyText(replyToken, `✨ เสกบิล/อัปเดตบิลสำเร็จ ${generatedCount} รอบบิล!\nโดยอิงจาก "หน่วยมิเตอร์จริง" และ "เรทราคาตั้งค่าปัจจุบัน"\n\nลองกดปุ่ม "ดูบิล / ค่าเช่า" อีกครั้งได้เลยค่ะ`);
 
       case 'แจ้งชำระเงิน':
         return await replyText(replyToken, 'กรุณาส่งรูปภาพสลิปโอนเงิน หรือหลักฐานการชำระเงินเข้ามาในแชทนี้ได้เลยค่ะ ทางเราจะรีบตรวจสอบให้ทันทีครับ');
