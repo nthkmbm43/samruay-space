@@ -66,6 +66,19 @@ app.get('/api/dev/clear-db', async (req, res) => {
   }
 });
 
+app.get('/api/dev/dump-db', async (req, res) => {
+  try {
+    const { Invoice, Tenant, Room, MeterReading } = require('./src/models');
+    const invoices = await Invoice.findAll();
+    const tenants = await Tenant.findAll();
+    const rooms = await Room.findAll();
+    const readings = await MeterReading.findAll();
+    res.json({ invoices, tenants, rooms, readings });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/properties', propertyRoutes);
