@@ -76,10 +76,9 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'Email already exists' });
     }
     
-    // In a real app, hash password using bcrypt
-    // const salt = await bcrypt.genSalt(10);
-    // const password_hash = await bcrypt.hash(password, salt);
-    const password_hash = password; // Temporary
+    const bcrypt = require('bcryptjs');
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
     
     const user = await User.create({
       email,
@@ -105,5 +104,28 @@ exports.register = async (req, res) => {
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.setupAdmin = async (req, res) => {
+  try {
+    const email = 'admin@samruay.com';
+    const existing = await User.findOne({ where: { email } });
+    if (existing) {
+      return res.json({ message: 'Admin already exists', email });
+    }
+    const bcrypt = require('bcryptjs');
+    const password_hash = await bcrypt.hash('123456', 10);
+    await User.create({
+      email,
+      password_hash,
+      first_name: 'Admin',
+      last_name: 'System',
+      role: 'admin'
+    });
+    res.json({ message: 'Admin account created successfully!', email, password: '123456' });
+  } catch (error) {
+    console.error('Setup error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
