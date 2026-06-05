@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const promotionController = require('../controllers/promotion.controller');
-const { protect, authorize } = require('../middlewares/auth.middleware');
+const { protect } = require('../middlewares/auth.middleware');
+const { authorize } = require('../middlewares/role.middleware');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
