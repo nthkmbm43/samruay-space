@@ -150,7 +150,10 @@ async function handleRegistration(lineUserId, text, replyToken) {
   if (!phone) return await replyText(replyToken, 'กรุณาระบุเบอร์โทรศัพท์ด้วยครับ เช่น\nลงทะเบียน 0812345678');
   
   const user = await User.findOne({ where: { phone } });
-  if (!user) return await replyText(replyToken, `ไม่พบเบอร์ ${phone} ในระบบ กรุณาติดต่อแอดมิน`);
+  if (!user) {
+    const liffUrl = process.env.LIFF_REGISTER_URL || 'https://liff.line.me/2006323631-Bq8ApepK';
+    return await replyText(replyToken, `ไม่พบเบอร์ ${phone} ในระบบครับ\n\nหากคุณเป็นผู้เช่าใหม่ที่ยังไม่เคยลงทะเบียน กรุณาคลิกลิงก์ด้านล่างเพื่อลงทะเบียนเข้าอยู่และเลือกห้องพักด้วยตัวเองครับ:\n${liffUrl}\n\nหรือหากเคยลงทะเบียนแล้ว กรุณาติดต่อแอดมินครับ`);
+  }
   
   user.line_user_id = lineUserId;
   await user.save();
