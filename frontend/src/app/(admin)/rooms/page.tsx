@@ -15,6 +15,8 @@ export default function RoomsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [properties, setProperties] = useState([]);
   const [editingRoom, setEditingRoom] = useState<any>(null);
+  const [deleteRoomId, setDeleteRoomId] = useState<number | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // Form
   const [number, setNumber] = useState('');
@@ -69,14 +71,22 @@ export default function RoomsPage() {
     }
   };
 
-  const handleDeleteRoom = async (id: number) => {
-    if (!confirm(t('confirmDelete') || 'คุณแน่ใจหรือไม่ว่าต้องการลบห้องพักนี้?')) return;
+  const handleDeleteRoom = (id: number) => {
+    setDeleteRoomId(id);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteRoomId) return;
     try {
-      await fetchApi(`/rooms/${id}`, { method: 'DELETE' });
+      await fetchApi(`/rooms/${deleteRoomId}`, { method: 'DELETE' });
       toast.success(t('roomDeleted') || 'ลบห้องพักสำเร็จ');
       loadData();
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setDeleteRoomId(null);
     }
   };
 
@@ -198,6 +208,22 @@ export default function RoomsPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isDeleteDialogOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl p-6 w-full max-w-sm shadow-lg border text-center">
+            <Trash2 className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <h3 className="text-lg font-bold mb-2">ยืนยันการลบข้อมูล</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              {t('confirmDelete') || 'คุณแน่ใจหรือไม่ว่าต้องการลบห้องพักนี้?'}
+            </p>
+            <div className="flex justify-center gap-3">
+              <Button variant="ghost" onClick={() => setIsDeleteDialogOpen(false)}>{t('cancel') || 'ยกเลิก'}</Button>
+              <Button variant="destructive" onClick={confirmDelete}>{t('deleteBtn') || 'ลบข้อมูล'}</Button>
+            </div>
           </div>
         </div>
       )}

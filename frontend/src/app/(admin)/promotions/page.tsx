@@ -12,6 +12,12 @@ export default function PromotionsPage() {
   const [image, setImage] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [deletePromoId, setDeletePromoId] = useState<number | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const [broadcastPromoId, setBroadcastPromoId] = useState<number | null>(null);
+  const [isBroadcastDialogOpen, setIsBroadcastDialogOpen] = useState(false);
+
   useEffect(() => {
     loadPromotions();
   }, []);
@@ -61,25 +67,41 @@ export default function PromotionsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('ยืนยันการลบข่าวสาร/โปรโมชั่น?')) return;
+  const handleDelete = (id: number) => {
+    setDeletePromoId(id);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletePromoId) return;
     try {
-      await fetchApi(`/promotions/${id}`, { method: 'DELETE' });
+      await fetchApi(`/promotions/${deletePromoId}`, { method: 'DELETE' });
       await loadPromotions();
     } catch (error) {
       console.error(error);
       alert('Error deleting');
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setDeletePromoId(null);
     }
   };
 
-  const handleBroadcast = async (id: number) => {
-    if (!confirm('ยืนยันส่งข่าวสารนี้ให้ผู้ใช้ทุกคนทาง LINE?')) return;
+  const handleBroadcast = (id: number) => {
+    setBroadcastPromoId(id);
+    setIsBroadcastDialogOpen(true);
+  };
+
+  const confirmBroadcast = async () => {
+    if (!broadcastPromoId) return;
     try {
-      await fetchApi(`/promotions/${id}/broadcast`, { method: 'POST' });
+      await fetchApi(`/promotions/${broadcastPromoId}/broadcast`, { method: 'POST' });
       alert('ส่ง Broadcast สำเร็จ!');
     } catch (error) {
       console.error(error);
       alert('Error broadcasting');
+    } finally {
+      setIsBroadcastDialogOpen(false);
+      setBroadcastPromoId(null);
     }
   };
 
@@ -149,6 +171,39 @@ export default function PromotionsPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {isDeleteDialogOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl p-6 w-full max-w-sm shadow-lg border text-center">
+            <h3 className="text-lg font-bold mb-2">ยืนยันการลบข้อมูล</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              คุณแน่ใจหรือไม่ว่าต้องการลบข่าวสาร/โปรโมชั่นนี้?
+            </p>
+            <div className="flex justify-center gap-3">
+              <button className="px-4 py-2 border border-border rounded-md text-sm font-medium hover:bg-muted" onClick={() => setIsDeleteDialogOpen(false)}>ยกเลิก</button>
+              <button className="bg-destructive text-destructive-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-destructive/90" onClick={confirmDelete}>ลบข้อมูล</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isBroadcastDialogOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl p-6 w-full max-w-sm shadow-lg border text-center">
+            <h3 className="text-lg font-bold mb-2">ยืนยันการส่ง Broadcast</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              ข่าวสารนี้จะถูกส่งแจ้งเตือนให้ลูกบ้านทุกคนทาง LINE ทันที คุณแน่ใจหรือไม่?
+            </p>
+            <div className="flex justify-center gap-3">
+              <button className="px-4 py-2 border border-border rounded-md text-sm font-medium hover:bg-muted" onClick={() => setIsBroadcastDialogOpen(false)}>ยกเลิก</button>
+              <button className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 flex items-center gap-2" onClick={confirmBroadcast}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13"></path><path d="M22 2L15 22L11 13L2 9L22 2Z"></path></svg>
+                ส่งเลย
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
