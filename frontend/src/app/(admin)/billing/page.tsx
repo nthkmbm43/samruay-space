@@ -39,7 +39,7 @@ export default function BillingPage() {
     loadData();
   }, []);
 
-  const handleGenerate = async (e) => {
+  const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     setGenerating(true);
     try {
