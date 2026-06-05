@@ -79,6 +79,7 @@ const Invoice = sequelize.define('Invoice', {
   paid_at: { type: DataTypes.DATE },
   paid_amount: { type: DataTypes.DECIMAL(10, 2) },
   notes: { type: DataTypes.TEXT },
+  pdf_url: { type: DataTypes.TEXT },
   generated_by: { type: DataTypes.STRING(10), defaultValue: 'auto' },
   created_by: {
     type: DataTypes.INTEGER,

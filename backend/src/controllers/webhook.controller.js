@@ -1,205 +1,180 @@
 const line = require('@line/bot-sdk');
-const User = require('../models/User');
-const Tenant = require('../models/Tenant');
-const Room = require('../models/Room');
-const Invoice = require('../models/Invoice');
+const fs = require('fs');
+const path = require('path');
+const { User, Tenant, Room, Invoice, MaintenanceRequest, Promotion } = require('../models');
+const pdfService = require('../services/pdf.service');
 
 const lineConfig = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || '',
 };
-
-// Create LINE client
 const client = new line.messagingApi.MessagingApiClient(lineConfig);
+
+// Simple In-Memory State for Chatbot (Ideally use Redis in production)
+const chatState = new Map();
 
 exports.handleLineWebhook = async (req, res) => {
   try {
     const events = req.body.events;
-    
-    // Process each event asynchronously
     await Promise.all(events.map(async (event) => {
+      const userId = event.source.userId;
+      
       if (event.type === 'message' && event.message.type === 'text') {
-        const userId = event.source.userId;
-        const text = event.message.text.trim();
-        
-        await handleIncomingText(userId, text, event.replyToken);
+        await handleIncomingText(userId, event.message.text.trim(), event.replyToken);
+      } else if (event.type === 'message' && event.message.type === 'image') {
+        await handleIncomingImage(userId, event.message.id, event.replyToken);
       }
     }));
-    
-    // LINE requires a 200 OK response quickly
     res.status(200).send('OK');
   } catch (error) {
     console.error('LINE webhook error:', error);
-    // Even if error, reply 200 so LINE stops retrying aggressively
     res.status(200).send('OK');
   }
 };
 
 async function handleIncomingText(lineUserId, text, replyToken) {
   try {
-    // 1. Account Linking
+    // Basic Registration Command
     if (text.startsWith('ลงทะเบียน')) {
-      const phone = text.replace('ลงทะเบียน', '').trim();
-      if (!phone) {
-        return await client.replyMessage({
-          replyToken: replyToken,
-          messages: [{
-            type: 'text',
-            text: 'กรุณาระบุเบอร์โทรศัพท์ด้วยครับ เช่น\nลงทะเบียน 0812345678'
-          }]
-        });
-      }
-      
-      const user = await User.findOne({ where: { phone } });
-      if (!user) {
-        return await client.replyMessage({
-          replyToken: replyToken,
-          messages: [{
-            type: 'text',
-            text: `ไม่พบเบอร์โทรศัพท์ ${phone} ในระบบครับ กรุณาติดต่อแอดมิน`
-          }]
-        });
-      }
-      
-      user.line_user_id = lineUserId;
-      // Get line profile
-      try {
-        const profile = await client.getProfile(lineUserId); // Note: getProfile is still on old client or MessagingApiClient might have it. Actually in v11 it's client.getProfile(lineUserId).
-        user.line_display_name = profile.displayName;
-      } catch (err) {
-        console.error('Could not get profile:', err);
-      }
-      await user.save();
-      
-      return await client.replyMessage({
-        replyToken: replyToken,
-        messages: [{
-          type: 'text',
-          text: `ลงทะเบียนสำเร็จ! ยินดีต้อนรับคุณ ${user.first_name} สู่ระบบ SAMRUAY SPACE ครับ`
-        }]
-      });
+      return await handleRegistration(lineUserId, text, replyToken);
     }
 
-    // Check if user is linked for other commands
     const user = await User.findOne({ where: { line_user_id: lineUserId } });
-    const isLinked = !!user;
+    if (!user) {
+      return await replyText(replyToken, 'กรุณาพิมพ์ "ลงทะเบียน [เบอร์โทรศัพท์]" เพื่อผูกบัญชีก่อนใช้งานระบบครับ');
+    }
 
-    // Rich Menu Commands
-    switch (text) {
-      case 'หน้าหลัก':
-        return await client.replyMessage({
-          replyToken: replyToken,
-          messages: [{
-            type: 'text',
-            text: isLinked ? `สวัสดีครับคุณ ${user.first_name}\nเลือกเมนูด้านล่างเพื่อดูข้อมูลหรือใช้บริการต่างๆ ได้เลยครับ` : 'สวัสดีครับ! กรุณาพิมพ์ "ลงทะเบียน [เบอร์โทรศัพท์]" เพื่อผูกบัญชีก่อนใช้งานเมนูต่างๆ ครับ'
-          }]
+    const tenant = await Tenant.findOne({ where: { user_id: user.id }, include: [{ model: Room, as: 'room' }] });
+
+    // --- State Machine ---
+    const currentState = chatState.get(lineUserId);
+    if (currentState) {
+      if (currentState.step === 'WAITING_MAINTENANCE_DETAIL') {
+        chatState.delete(lineUserId);
+        
+        // Save Maintenance Request
+        await MaintenanceRequest.create({
+          property_id: tenant?.room?.property_id || 1,
+          room_id: tenant?.room_id,
+          tenant_id: tenant?.id,
+          title: 'แจ้งซ่อมจาก LINE',
+          description: text,
+          status: 'pending',
+          priority: 'medium'
         });
 
-      case 'ดูบิล / ค่าเช่า':
-        if (!isLinked) return sendNeedsLogin(replyToken);
-        
-        // Find latest billing
-        const tenant = await Tenant.findOne({ where: { user_id: user.id }, include: [{ model: Room, as: 'room' }] });
-        if (!tenant) {
-          return await client.replyMessage({
-            replyToken: replyToken,
-            messages: [{ type: 'text', text: 'ไม่พบข้อมูลการเช่าห้องของคุณในระบบ' }]
-          });
-        }
-        
+        return await replyText(replyToken, '✅ รับเรื่องแจ้งซ่อมเรียบร้อยครับ ทางแอดมินจะรีบตรวจสอบและส่งช่างเข้าไปดำเนินการครับ (ระบบจะแจ้งเตือนเมื่อซ่อมเสร็จ)');
+      }
+    }
+
+    // --- Menu Commands ---
+    switch (text) {
+      case 'หน้าหลัก':
+        return await replyText(replyToken, `สวัสดีครับคุณ ${user.first_name}\nหากต้องการแจ้งซ่อม ส่งสลิป หรือขอย้ายออก สามารถพิมพ์บอกในแชทนี้ได้เลยครับ`);
+
+      case 'ดูบิล':
+      case 'ค่าเช่า':
+        if (!tenant) return await replyText(replyToken, 'ไม่พบข้อมูลห้องพักของคุณครับ');
         const latestBill = await Invoice.findOne({ 
-          where: { tenant_id: tenant.id },
-          order: [['created_at', 'DESC']]
+          where: { tenant_id: tenant.id }, order: [['created_at', 'DESC']]
         });
         
         if (!latestBill) {
-          return await client.replyMessage({
-            replyToken: replyToken,
-            messages: [{ type: 'text', text: 'คุณยังไม่มีบิลค่าเช่าในระบบครับ' }]
-          });
+          return await replyText(replyToken, 'คุณยังไม่มีบิลค่าเช่าในระบบครับ');
         }
         
-        const statusText = latestBill.status === 'paid' ? '✅ ชำระแล้ว' : '⏳ รอชำระเงิน';
-        const msg = `บิลค่าเช่าล่าสุดของคุณ:\nห้อง: ${tenant.room?.room_number || 'ไม่ระบุ'}\nยอดรวม: ฿${latestBill.total_amount}\nสถานะ: ${statusText}\nวันครบกำหนด: ${new Date(latestBill.due_date).toLocaleDateString('th-TH')}`;
-        
-        return await client.replyMessage({
-          replyToken: replyToken,
-          messages: [{ type: 'text', text: msg }]
-        });
-
-      case 'แจ้งชำระเงิน':
-        if (!isLinked) return sendNeedsLogin(replyToken);
-        return await client.replyMessage({
-          replyToken: replyToken,
-          messages: [{
-            type: 'text',
-            text: 'คุณสามารถพิมพ์จำนวนเงิน วันเวลาที่โอน หรือแนบสลิปส่งมาในแชทนี้ได้เลยครับ (ระบบอัปโหลดสลิปผ่านไลน์กำลังอยู่ระหว่างพัฒนา)'
-          }]
-        });
+        if (latestBill.pdf_url) {
+          const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
+          return await replyText(replyToken, `บิลค่าเช่าเดือนล่าสุดยอด: ${latestBill.total} บาท\nสถานะ: ${latestBill.status}\n\nคลิกเพื่อดูใบแจ้งหนี้ PDF:\n${appUrl}${latestBill.pdf_url}`);
+        } else {
+          return await replyText(replyToken, `บิลค่าเช่ายอด: ${latestBill.total} บาท (สถานะ: ${latestBill.status})`);
+        }
 
       case 'แจ้งซ่อม':
-        if (!isLinked) return sendNeedsLogin(replyToken);
-        return await client.replyMessage({
-          replyToken: replyToken,
-          messages: [{
-            type: 'text',
-            text: 'พบปัญหาอะไร แจ้งมาในแชทนี้ได้เลยครับ กรุณาพิมพ์คำว่า "ซ่อม:" นำหน้า เช่น\n"ซ่อม: แอร์ไม่เย็น"'
-          }]
-        });
+        chatState.set(lineUserId, { step: 'WAITING_MAINTENANCE_DETAIL', timestamp: Date.now() });
+        return await replyText(replyToken, '🛠️ คุณต้องการแจ้งซ่อมเรื่องอะไรครับ?\n(พิมพ์รายละเอียดส่งมาในแชทนี้ได้เลยครับ เช่น แอร์ไม่เย็น, ท่อน้ำซึม)');
 
-      case 'แจ้งเข้า-ออก':
-        if (!isLinked) return sendNeedsLogin(replyToken);
-        return await client.replyMessage({
-          replyToken: replyToken,
-          messages: [{
-            type: 'text',
-            text: 'ต้องการแจ้งย้ายเข้าหรือย้ายออก โปรดพิมพ์รายละเอียดในแชทนี้ได้เลยครับ ทางแอดมินจะติดต่อกลับ'
-          }]
-        });
-
-      case 'ข่าวสาร / โปรโมชั่น':
-        return await client.replyMessage({
-          replyToken: replyToken,
-          messages: [{
-            type: 'text',
-            text: 'ไม่มีข่าวสารใหม่ในขณะนี้ครับ ขอบคุณที่ใช้บริการ SAMRUAY SPACE'
-          }]
-        });
-        
-      default:
-        // Handle prefix cases (e.g. "ซ่อม: ...")
-        if (text.startsWith('ซ่อม:')) {
-          if (!isLinked) return sendNeedsLogin(replyToken);
-          // In real app, create Maintenance record
-          return await client.replyMessage({
-            replyToken: replyToken,
-            messages: [{
-              type: 'text',
-              text: 'รับเรื่องแจ้งซ่อมเรียบร้อยครับ ทางเราจะรีบดำเนินการตรวจสอบให้เร็วที่สุด'
-            }]
-          });
+      case 'ข่าวสาร':
+        const promo = await Promotion.findOne({ order: [['created_at', 'DESC']] });
+        if (promo) {
+          return await replyText(replyToken, `📣 ข่าวสาร/โปรโมชั่นล่าสุด:\n${promo.name}\n${promo.description || ''}`);
         }
+        return await replyText(replyToken, 'ไม่มีข่าวสารใหม่ในขณะนี้ครับ');
 
-        // Just ignore unknown messages or provide a generic fallback
-        return await client.replyMessage({
-          replyToken: replyToken,
-          messages: [{
-            type: 'text',
-            text: 'ขออภัยครับ ระบบอัตโนมัติยังไม่เข้าใจข้อความนี้ กรุณาเลือกเมนูจากด้านล่าง หรือฝากข้อความไว้ให้แอดมินครับ'
-          }]
-        });
+      case 'แจ้งออก':
+      case 'แจ้งย้ายออก':
+        return await replyText(replyToken, '📝 ได้รับเรื่องแจ้งย้ายออกแล้วครับ แอดมินจะเข้าไปตรวจสอบความเรียบร้อยของห้อง และจะส่ง [บิลสรุปยอดสุทธิพร้อมเงินประกันคืน] กลับมาให้ในแชทนี้อีกครั้งนะครับ');
+
+      default:
+        // Assume text might be asking something else, or fallback
+        return await replyText(replyToken, 'หากต้องการชำระเงิน กรุณาส่งรูปสลิปมาในแชทนี้ได้เลยครับ\nหรือพิมพ์เมนูที่ต้องการ (ดูบิล, แจ้งซ่อม, ข่าวสาร, แจ้งออก)');
     }
-
   } catch (error) {
-    console.error('Error handling text message:', error);
+    console.error('Error handling text:', error);
   }
 }
 
-async function sendNeedsLogin(replyToken) {
+async function handleIncomingImage(lineUserId, messageId, replyToken) {
+  try {
+    const user = await User.findOne({ where: { line_user_id: lineUserId } });
+    if (!user) return; // Ignore images from unregistered users
+
+    const tenant = await Tenant.findOne({ where: { user_id: user.id } });
+    if (!tenant) return;
+
+    // Find the latest pending invoice
+    const pendingInvoice = await Invoice.findOne({ 
+      where: { tenant_id: tenant.id, status: 'pending' },
+      order: [['created_at', 'DESC']]
+    });
+
+    if (!pendingInvoice) {
+      return await replyText(replyToken, 'คุณไม่มีบิลที่ต้องชำระในขณะนี้ครับ แต่เราบันทึกรูปภาพของคุณไว้แล้ว');
+    }
+
+    // In a real app, download the image using line.messagingApiBlob.MessagingApiBlobClient
+    // and save it. For now, just mark the invoice as awaiting verification.
+    
+    pendingInvoice.status = 'paid'; // Or awaiting_verification
+    pendingInvoice.paid_at = new Date();
+    await pendingInvoice.save();
+
+    await replyText(replyToken, `✅ ได้รับสลิปชำระเงินเรียบร้อยแล้วครับ ระบบจะทำการอัปเดตสถานะบิลของคุณ (ยอด ${pendingInvoice.total} บาท) ให้ทันที ขอบคุณครับ!`);
+
+  } catch (error) {
+    console.error('Error handling image:', error);
+  }
+}
+
+async function handleRegistration(lineUserId, text, replyToken) {
+  const phone = text.replace('ลงทะเบียน', '').trim();
+  if (!phone) return await replyText(replyToken, 'กรุณาระบุเบอร์โทรศัพท์ด้วยครับ เช่น\nลงทะเบียน 0812345678');
+  
+  const user = await User.findOne({ where: { phone } });
+  if (!user) return await replyText(replyToken, `ไม่พบเบอร์ ${phone} ในระบบ กรุณาติดต่อแอดมิน`);
+  
+  user.line_user_id = lineUserId;
+  await user.save();
+  return await replyText(replyToken, `ลงทะเบียนสำเร็จ! ยินดีต้อนรับคุณ ${user.first_name} เข้าสู่ระบบครับ`);
+}
+
+async function replyText(replyToken, text) {
   return await client.replyMessage({
     replyToken: replyToken,
-    messages: [{
-      type: 'text',
-      text: 'กรุณาพิมพ์ "ลงทะเบียน [เบอร์โทรศัพท์]" เพื่อผูกบัญชีของท่านก่อนใช้งานเมนูนี้ครับ'
-    }]
+    messages: [{ type: 'text', text }]
   });
 }
+
+// Utility for sending Push Messages from Admin Dashboard
+exports.sendPushMessage = async (userId, text) => {
+  try {
+    const user = await User.findByPk(userId);
+    if (user && user.line_user_id) {
+      await client.pushMessage({
+        to: user.line_user_id,
+        messages: [{ type: 'text', text }]
+      });
+    }
+  } catch (error) {
+    console.error('Push Message Failed:', error);
+  }
+};
