@@ -68,21 +68,39 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           return await replyText(replyToken, 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง กรุณาพิมพ์ใหม่อีกครั้งค่ะ');
         }
 
+        const availableRooms = await Room.findAll({
+          where: { status: 'available' },
+          order: [['room_number', 'ASC']]
+        });
+
+        let roomListStr = '';
+        if (availableRooms.length > 0) {
+          roomListStr = availableRooms.map(r => `ห้อง ${r.room_number}: ราคา ${parseFloat(r.price_override || 1500).toLocaleString()} บาท/เดือน`).join('\n');
+        } else {
+          chatState.delete(lineUserId);
+          return await replyText(replyToken, 'ขออภัยค่ะ ขณะนี้ไม่มีห้องว่างเลยค่ะ ไม่สามารถจองได้ในขณะนี้');
+        }
+
         chatState.set(lineUserId, {
           step: 'WAITING_REGISTER_ROOM',
           data: { ...currentState.data, phone },
           timestamp: Date.now()
         });
 
-        return await replyText(replyToken, `กรุณาพิมพ์ "เลขห้อง" ที่ต้องการจองค่ะ (เช่น 101)`);
+        return await replyText(replyToken, `ข้อมูลเบอร์โทรศัพท์ครบถ้วนค่ะ!\n\nตอนนี้มีห้องว่างดังนี้ค่ะ:\n${roomListStr}\n\nกรุณาพิมพ์ "เลขห้อง" ที่ต้องการจองค่ะ (เช่น 101)`);
       }
 
       if (currentState.step === 'WAITING_REGISTER_ROOM') {
-        const roomNum = text.replace(/จองห้อง|จอง/g, '').trim();
+        const match = text.match(/\d+/);
+        if (!match) {
+           return await replyText(replyToken, 'กรุณาระบุเลขห้องเป็นตัวเลขด้วยค่ะ (เช่น 101)');
+        }
+        const roomNum = match[0];
+        
         const room = await Room.findOne({ where: { room_number: roomNum, status: 'available' } });
         
         if (!room) {
-          return await replyText(replyToken, `ขออภัยค่ะ ไม่พบห้อง ${roomNum} หรือห้องนี้ไม่ว่างแล้ว กรุณาเลือกเลขห้องใหม่ค่ะ`);
+          return await replyText(replyToken, `ขออภัยค่ะ ไม่พบห้อง ${roomNum} หรือห้องนี้ไม่ว่างแล้ว กรุณาเลือกเลขห้องใหม่จากรายการค่ะ`);
         }
 
         // Execute Booking
@@ -164,12 +182,15 @@ async function handleIncomingText(lineUserId, text, replyToken) {
     } // End of State Machine
 
     // If new registration requested
-    if (isRegisterNew) {
+    if (isRegisterNew || text === 'ลงทะเบียน') {
+      if (tenant && tenant.room) {
+        return await replyText(replyToken, `ปัจจุบันคุณเข้าพักที่ ห้อง ${tenant.room.room_number} แล้วค่ะ ไม่ต้องลงทะเบียนใหม่นะคะ 😊`);
+      }
       chatState.set(lineUserId, { step: 'WAITING_REGISTER_NAME', timestamp: Date.now() });
       return await replyText(replyToken, 'ยินดีค่ะ! เพื่อเริ่มขั้นตอนการจองห้องพัก กรุณากรอกข้อมูลตามนี้ทีละขั้นตอนนะคะ:\n\nพิมพ์ ชื่อ-นามสกุล ของคุณค่ะ');
     }
 
-    if (text.startsWith('ลงทะเบียน')) {
+    if (text.startsWith('ลงทะเบียน ')) {
       return await handleOldRegistrationLinking(lineUserId, text, replyToken);
     }
 
