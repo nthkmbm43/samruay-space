@@ -24,6 +24,10 @@ const Promotion = sequelize.define('Promotion', {
     type: DataTypes.TEXT,
     allowNull: true
   },
+  image_url: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
   type: {
     type: DataTypes.STRING(30),
     allowNull: false

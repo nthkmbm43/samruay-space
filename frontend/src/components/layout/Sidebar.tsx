@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Home, Building2, DoorOpen, Users, Receipt, Settings, Wrench } from 'lucide-react';
+import { Home, Building2, DoorOpen, Users, Receipt, Settings, Wrench, Megaphone } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export function Sidebar() {
@@ -10,6 +10,7 @@ export function Sidebar() {
 
   const navItems = [
     { name: t('dashboard'), href: '/dashboard', icon: Home },
+    { name: 'โปรโมชั่น', href: '/promotions', icon: Megaphone },
     { name: t('properties'), href: '/properties', icon: Building2 },
     { name: t('rooms'), href: '/rooms', icon: DoorOpen },
     { name: t('tenants'), href: '/tenants', icon: Users },

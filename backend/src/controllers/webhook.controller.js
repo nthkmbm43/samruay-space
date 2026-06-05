@@ -255,8 +255,27 @@ async function handleIncomingText(lineUserId, text, replyToken) {
 
       case 'ข่าวสาร':
         const promo = await Promotion.findOne({ order: [['created_at', 'DESC']] });
-        if (promo) return await replyText(replyToken, `📣 ข่าวสาร/โปรโมชั่นล่าสุด:\n${promo.name}\n${promo.description || ''}`);
-        return await replyText(replyToken, 'ไม่มีข่าวสารใหม่ในขณะนี้ค่ะ');
+        if (promo) {
+          const messages = [];
+          if (promo.image_url) {
+            const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
+            const imageUrl = `${appUrl}${promo.image_url}`;
+            messages.push({
+              type: 'image',
+              originalContentUrl: imageUrl,
+              previewImageUrl: imageUrl
+            });
+          }
+          messages.push({
+            type: 'text',
+            text: `📣 ข่าวสาร/โปรโมชั่นล่าสุด:\n${promo.name}\n${promo.description || ''}`
+          });
+          return await client.replyMessage({
+            replyToken: replyToken,
+            messages
+          });
+        }
+        return await replyText(replyToken, 'ในเดือนนี้ยังไม่มีกิจกรรมหรือโปรโมชั่นพิเศษ กรุณารอติดตามข่าวสารดีๆ จากเราได้เร็วๆ นี้นะคะ 💖');
 
       case 'แจ้งออก':
       case 'แจ้งย้ายออก':

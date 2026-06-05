@@ -33,6 +33,8 @@ const billingRoutes = require('./src/routes/billing.routes');
 const maintenanceRoutes = require('./src/routes/maintenance.routes');
 const settingRoutes = require('./src/routes/setting.routes');
 const notificationRoutes = require('./src/routes/notification.routes');
+const lineRoutes = require('./src/routes/line.routes');
+const promotionRoutes = require('./src/routes/promotion.routes');
 
 // Basic Route
 app.get('/', (req, res) => {
@@ -48,6 +50,8 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/line', lineRoutes);
+app.use('/api/promotions', promotionRoutes);
 
 // Sync Database and Start Server
 const PORT = process.env.PORT || 3001;
