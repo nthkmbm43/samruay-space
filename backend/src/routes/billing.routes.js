@@ -14,6 +14,7 @@ router.route('/invoices/:id')
   .get(protect, billingController.getInvoiceById);
 
 router.route('/meters')
+  .get(protect, billingController.getMeters)
   .post(protect, authorize('super_admin', 'admin'), billingController.recordMeters);
 
 router.route('/invoices/:id/payments')

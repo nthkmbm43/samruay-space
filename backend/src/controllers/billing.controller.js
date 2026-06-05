@@ -51,12 +51,12 @@ exports.generateInvoices = async (req, res) => {
   try {
     const { property_id, period_month, period_year, due_date } = req.body;
     
-    // Find active contracts for the property
-    const activeContracts = await Contract.findAll({
-      where: { status: 'active' },
+    // Find active tenants for the property
+    const activeTenants = await Tenant.findAll({
       include: [
         { 
           model: Room, 
+          as: 'room',
           where: { property_id } 
         }
       ]
@@ -64,11 +64,11 @@ exports.generateInvoices = async (req, res) => {
 
     const generatedInvoices = [];
 
-    for (const contract of activeContracts) {
+    for (const tenant of activeTenants) {
       // Find meter reading for this period
       const reading = await MeterReading.findOne({
         where: {
-          room_id: contract.room_id,
+          room_id: tenant.room_id,
           period_month,
           period_year
         }
@@ -90,14 +90,14 @@ exports.generateInvoices = async (req, res) => {
         elec_amount = elec_units * elec_rate;
       }
 
-      const room_price = Number(contract.monthly_price);
+      const room_price = Number(tenant.room.price || tenant.room.price_override || 0);
       const subtotal = room_price + water_amount + elec_amount;
       const total = subtotal; // Ignoring VAT and discounts for this simple MVP
 
       // Check if invoice already exists
       const existingInvoice = await Invoice.findOne({
         where: {
-          contract_id: contract.id,
+          tenant_id: tenant.id,
           period_month,
           period_year
         }
@@ -105,11 +105,10 @@ exports.generateInvoices = async (req, res) => {
 
       if (!existingInvoice) {
         const invoice = await Invoice.create({
-          invoice_number: `INV-${period_year}${period_month.toString().padStart(2, '0')}-${contract.room_id}`,
+          invoice_number: `INV-${period_year}${period_month.toString().padStart(2, '0')}-${tenant.room_id}`,
           property_id,
-          room_id: contract.room_id,
-          tenant_id: contract.tenant_id,
-          contract_id: contract.id,
+          room_id: tenant.room_id,
+          tenant_id: tenant.id,
           period_month,
           period_year,
           due_date: due_date || new Date(period_year, period_month, 5), // Default to 5th of next month
@@ -260,6 +259,20 @@ exports.recordMeters = async (req, res) => {
     res.status(201).json({ message: 'Meters recorded successfully' });
   } catch (error) {
     console.error('Record meters error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.getMeters = async (req, res) => {
+  try {
+    const { MeterReading, Room } = require('../models');
+    const readings = await MeterReading.findAll({
+      include: [{ model: Room, as: 'room', attributes: ['room_number'] }],
+      order: [['period_year', 'DESC'], ['period_month', 'DESC']]
+    });
+    res.json(readings);
+  } catch (error) {
+    console.error('Get meters error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

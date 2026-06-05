@@ -11,12 +11,13 @@ import { toast } from 'react-hot-toast';
 export default function BillingPage() {
   const { t } = useLanguage();
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [meters, setMeters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState([]);
   const [rooms, setRooms] = useState([]);
   
   // Tabs
-  const [activeTab, setActiveTab] = useState<'all' | 'booking' | 'monthly'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'booking' | 'monthly' | 'meters'>('all');
 
   // Generation Modal
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -40,14 +41,16 @@ export default function BillingPage() {
 
   const loadData = async () => {
     try {
-      const [invData, propData, roomData] = await Promise.all([
+      const [invData, propData, roomData, meterData] = await Promise.all([
         fetchApi('/billing/invoices'),
         fetchApi('/properties'),
-        fetchApi('/rooms')
+        fetchApi('/rooms'),
+        fetchApi('/billing/meters')
       ]);
       setInvoices(invData);
       setProperties(propData);
       setRooms(roomData);
+      setMeters(meterData);
       if (propData.length > 0 && !propertyId) setPropertyId(propData[0].id.toString());
     } catch (err) {
       console.error(err);
@@ -188,11 +191,40 @@ export default function BillingPage() {
         <button onClick={() => setActiveTab('all')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'all' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:bg-muted-foreground/10'}`}>ทั้งหมด</button>
         <button onClick={() => setActiveTab('booking')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'booking' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:bg-muted-foreground/10'}`}>โอนจองห้อง</button>
         <button onClick={() => setActiveTab('monthly')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'monthly' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:bg-muted-foreground/10'}`}>บิลรายเดือน</button>
+        <button onClick={() => setActiveTab('meters')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'meters' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:bg-muted-foreground/10'}`}>มิเตอร์น้ำ/ไฟ</button>
       </div>
 
       <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
+        {activeTab === 'meters' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b">
+                <tr>
+                  <th className="px-6 py-4">ห้อง</th>
+                  <th className="px-6 py-4">เดือน/ปี</th>
+                  <th className="px-6 py-4 text-center"><div className="flex items-center justify-center gap-1"><Droplet className="w-4 h-4 text-blue-500" /> ค่าน้ำ (หน่วย)</div></th>
+                  <th className="px-6 py-4 text-center"><div className="flex items-center justify-center gap-1"><Zap className="w-4 h-4 text-orange-500" /> ค่าไฟ (หน่วย)</div></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {meters.length > 0 ? meters.map((m: any) => (
+                  <tr key={m.id} className="bg-card hover:bg-muted/50 transition-colors">
+                    <td className="px-6 py-4 font-medium">{m.room?.room_number || m.room_id}</td>
+                    <td className="px-6 py-4">{m.period_month}/{m.period_year}</td>
+                    <td className="px-6 py-4 text-center text-blue-600 font-semibold">{m.water_units}</td>
+                    <td className="px-6 py-4 text-center text-orange-600 font-semibold">{m.elec_units}</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground">ไม่มีข้อมูลมิเตอร์</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border">
               <tr>
                 <th className="px-6 py-4 font-medium">เลขที่บิล</th>
@@ -248,7 +280,8 @@ export default function BillingPage() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        )}
       </Card>
 
       {/* Verify Slip Modal */}
