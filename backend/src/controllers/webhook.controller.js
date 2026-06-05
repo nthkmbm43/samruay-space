@@ -252,9 +252,17 @@ async function handleIncomingText(lineUserId, text, replyToken) {
 
         const invoiceFlex = {
           type: "flex",
-          altText: `บิลค่าเช่าเดือน ${latestBill.month}/${latestBill.year}`,
+          altText: `บิลค่าเช่าเดือน ${latestBill.period_month}/${latestBill.period_year}`,
           contents: {
             type: "bubble",
+            hero: {
+              type: "image",
+              url: "https://samruay-space.vercel.app/logo.png",
+              size: "full",
+              aspectRatio: "20:13",
+              aspectMode: "fit",
+              backgroundColor: "#ffffff"
+            },
             header: {
               type: "box",
               layout: "vertical",
@@ -269,7 +277,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
                 },
                 {
                   type: "text",
-                  text: `ห้อง ${latestBill.Room?.room_number || '-'} | รอบบิล ${latestBill.month}/${latestBill.year}`,
+                  text: `ห้อง ${latestBill.Room?.room_number || '-'} | รอบบิล ${latestBill.period_month}/${latestBill.period_year}`,
                   size: "md",
                   color: "#aaaaaa",
                   align: "center",
@@ -286,28 +294,28 @@ async function handleIncomingText(lineUserId, text, replyToken) {
                   type: "box", layout: "horizontal", margin: "xxl",
                   contents: [
                     { type: "text", text: "ค่าเช่าห้อง", size: "sm", color: "#555555" },
-                    { type: "text", text: `${parseFloat(latestBill.room_rate || 0).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
+                    { type: "text", text: `${parseFloat(latestBill.room_price || 0).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
                   ]
                 },
                 {
                   type: "box", layout: "horizontal", margin: "md",
                   contents: [
-                    { type: "text", text: `ค่าน้ำ (${latestBill.water_usage} หน่วย)`, size: "sm", color: "#555555" },
-                    { type: "text", text: `${parseFloat(latestBill.water_cost || 0).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
+                    { type: "text", text: `ค่าน้ำ (${latestBill.water_units} หน่วย)`, size: "sm", color: "#555555" },
+                    { type: "text", text: `${parseFloat(latestBill.water_amount || 0).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
                   ]
                 },
                 {
                   type: "box", layout: "horizontal", margin: "md",
                   contents: [
-                    { type: "text", text: `ค่าไฟ (${latestBill.electric_usage} หน่วย)`, size: "sm", color: "#555555" },
-                    { type: "text", text: `${parseFloat(latestBill.electric_cost || 0).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
+                    { type: "text", text: `ค่าไฟ (${latestBill.elec_units} หน่วย)`, size: "sm", color: "#555555" },
+                    { type: "text", text: `${parseFloat(latestBill.elec_amount || 0).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
                   ]
                 },
-                ...(parseFloat(latestBill.common_fee) > 0 ? [{
+                ...(parseFloat(latestBill.late_fee) > 0 ? [{
                   type: "box", layout: "horizontal", margin: "md",
                   contents: [
-                    { type: "text", text: "ค่าส่วนกลาง", size: "sm", color: "#555555" },
-                    { type: "text", text: `${parseFloat(latestBill.common_fee).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
+                    { type: "text", text: "ค่าปรับล่าช้า", size: "sm", color: "#555555" },
+                    { type: "text", text: `${parseFloat(latestBill.late_fee).toLocaleString()} ฿`, size: "sm", color: "#111111", align: "end" }
                   ]
                 }] : []),
                 { type: "separator", margin: "xxl" },
