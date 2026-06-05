@@ -269,10 +269,16 @@ async function handleIncomingText(lineUserId, text, replyToken) {
 async function handleIncomingImage(lineUserId, messageId, replyToken) {
   try {
     const user = await User.findOne({ where: { line_user_id: lineUserId } });
-    if (!user) return; // Ignore images from unregistered users
+    if (!user) {
+      await replyText(replyToken, '❌ ไม่พบข้อมูลบัญชีผู้ใช้งานของคุณในระบบ');
+      return;
+    }
 
-    const tenant = await Tenant.findOne({ where: { user_id: user.id }, include: [{ model: Room, as: 'room' }] });
-    if (!tenant) return;
+    const tenant = await Tenant.findOne({ where: { user_id: user.id }, order: [['created_at', 'DESC']], include: [{ model: Room, as: 'room' }] });
+    if (!tenant) {
+      await replyText(replyToken, '❌ ไม่พบข้อมูลการเช่าห้องของคุณในระบบ');
+      return;
+    }
 
     const { Op } = require('sequelize');
     const pendingInvoice = await Invoice.findOne({ 
@@ -319,6 +325,7 @@ async function handleIncomingImage(lineUserId, messageId, replyToken) {
 
   } catch (error) {
     console.error('Error handling image:', error);
+    await replyText(replyToken, `❌ เกิดข้อผิดพลาดในระบบ: ${error.message}`);
   }
 }
 
