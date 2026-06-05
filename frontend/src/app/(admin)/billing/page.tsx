@@ -54,7 +54,8 @@ export default function BillingPage() {
       setIsDialogOpen(false);
       loadData();
     } catch (err) {
-      alert(err.message);
+      if (err instanceof Error) alert(err.message);
+      else alert(String(err));
     } finally {
       setGenerating(false);
     }
@@ -90,11 +91,11 @@ export default function BillingPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium">{t('month')}</label>
-                  <input type="number" min="1" max="12" required value={periodMonth} onChange={e => setPeriodMonth(e.target.value)} className="w-full mt-1 border rounded-md px-3 py-2" />
+                  <input type="number" min="1" max="12" required value={periodMonth} onChange={e => setPeriodMonth(parseInt(e.target.value) || 1)} className="w-full mt-1 border rounded-md px-3 py-2" />
                 </div>
                 <div>
                   <label className="text-sm font-medium">{t('year')}</label>
-                  <input type="number" required value={periodYear} onChange={e => setPeriodYear(e.target.value)} className="w-full mt-1 border rounded-md px-3 py-2" />
+                  <input type="number" required value={periodYear} onChange={e => setPeriodYear(parseInt(e.target.value) || new Date().getFullYear())} className="w-full mt-1 border rounded-md px-3 py-2" />
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">
