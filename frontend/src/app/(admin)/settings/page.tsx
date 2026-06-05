@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from 'react-hot-toast';
 
 export default function SettingsPage() {
   const { t } = useLanguage();
@@ -44,9 +45,9 @@ export default function SettingsPage() {
           water_rate: waterRate 
         })
       });
-      alert(t('settingsSaved'));
+      toast.success(t('settingsSaved'));
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message);
     } finally {
       setSaving(false);
     }

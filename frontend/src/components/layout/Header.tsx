@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { useTheme } from '@/components/theme-provider';
 import { useLanguage } from '@/contexts/LanguageContext';
 
+import { NotificationDropdown } from './NotificationDropdown';
+
 export function Header() {
   const { theme, setTheme } = useTheme();
   const { language, setLanguage, t } = useLanguage();
@@ -36,10 +38,7 @@ export function Header() {
         <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title="Toggle Theme">
           {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
         </Button>
-        <Button variant="ghost" size="icon" className="relative" onClick={() => alert(t('notifications'))}>
-          <Bell className="w-5 h-5 text-muted-foreground" />
-          <span className="absolute top-2 right-2.5 w-2 h-2 bg-primary rounded-full"></span>
-        </Button>
+        <NotificationDropdown />
         <Link href="/billing" passHref>
           <Button variant="default" className="hidden sm:flex">
             + {t('createInvoice')}

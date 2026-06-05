@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Plus, Search, Receipt, Loader2 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from 'react-hot-toast';
 
 export default function BillingPage() {
   const { t } = useLanguage();
@@ -51,11 +52,12 @@ export default function BillingPage() {
           period_year: Number(periodYear)
         })
       });
+      toast.success(t('invoiceCreated') || 'สร้างใบแจ้งหนี้สำเร็จ!');
       setIsDialogOpen(false);
       loadData();
-    } catch (err) {
-      if (err instanceof Error) alert(err.message);
-      else alert(String(err));
+    } catch (err: any) {
+      if (err instanceof Error) toast.error(err.message);
+      else toast.error(String(err));
     } finally {
       setGenerating(false);
     }

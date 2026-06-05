@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { DoorOpen, Filter, Plus, Search, Loader2 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from 'react-hot-toast';
 
 export default function RoomsPage() {
   const { t } = useLanguage();
@@ -57,11 +58,12 @@ export default function RoomsPage() {
           property_id: Number(propertyId)
         })
       });
+      toast.success(t('roomAdded') || 'เพิ่มห้องสำเร็จ');
       setIsDialogOpen(false);
       setNumber(''); setPrice(''); setFloor('');
       loadData();
-    } catch (err) {
-      alert(err.message);
+    } catch (err: any) {
+      toast.error(err.message);
     } finally {
       setSaving(false);
     }
@@ -144,10 +146,11 @@ export default function RoomsPage() {
                       : editingRoom.price_override
                   })
                 });
+                toast.success('อัปเดตห้องสำเร็จ');
                 setEditingRoom(null);
                 loadData();
               } catch (err: any) {
-                alert(err.message);
+                toast.error(err.message);
               } finally {
                 setSaving(false);
               }

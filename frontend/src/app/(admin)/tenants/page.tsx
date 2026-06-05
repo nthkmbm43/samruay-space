@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Plus, Search, User, Loader2 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from 'react-hot-toast';
 
 export default function TenantsPage() {
   const { t } = useLanguage();
@@ -57,11 +58,12 @@ export default function TenantsPage() {
           room_id: Number(roomId) 
         })
       });
+      toast.success(t('tenantAdded') || 'เพิ่มผู้เช่าสำเร็จ');
       setIsDialogOpen(false);
       setFirstName(''); setLastName(''); setEmail(''); setPhone('');
       loadData();
-    } catch (err) {
-      alert(err.message);
+    } catch (err: any) {
+      toast.error(err.message);
     } finally {
       setSaving(false);
     }
@@ -140,10 +142,11 @@ export default function TenantsPage() {
                     room_id: viewingTenant.room_id ? Number(viewingTenant.room_id) : null
                   })
                 });
+                toast.success('แก้ไขข้อมูลสำเร็จ');
                 setViewingTenant(null);
                 loadData();
               } catch (err: any) {
-                alert(err.message);
+                toast.error(err.message);
               } finally {
                 setSaving(false);
               }

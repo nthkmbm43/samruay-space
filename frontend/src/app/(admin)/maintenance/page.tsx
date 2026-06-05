@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Plus, Search, Wrench, Loader2 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from 'react-hot-toast';
 
 export default function MaintenancePage() {
   const { t } = useLanguage();
@@ -48,11 +49,12 @@ export default function MaintenancePage() {
         method: 'POST',
         body: JSON.stringify({ room_id: Number(roomId), title, description })
       });
+      toast.success(t('requestSubmitted') || 'แจ้งซ่อมสำเร็จ');
       setIsDialogOpen(false);
       setTitle(''); setDescription('');
       loadData();
-    } catch (err) {
-      alert(err.message);
+    } catch (err: any) {
+      toast.error(err.message);
     } finally {
       setSaving(false);
     }
