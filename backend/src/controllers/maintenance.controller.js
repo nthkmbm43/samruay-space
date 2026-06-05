@@ -1,4 +1,10 @@
 const { MaintenanceRequest, Room, Tenant, User } = require('../models');
+const line = require('@line/bot-sdk');
+
+const lineConfig = {
+  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || '',
+};
+const client = new line.messagingApi.MessagingApiClient(lineConfig);
 
 exports.getAllRequests = async (req, res) => {
   try {
@@ -28,14 +34,66 @@ exports.createRequest = async (req, res) => {
 
 exports.updateRequestStatus = async (req, res) => {
   try {
-    const request = await MaintenanceRequest.findByPk(req.params.id);
+    const request = await MaintenanceRequest.findByPk(req.params.id, {
+      include: [
+        { model: Room },
+        { model: Tenant, include: [{ model: User, as: 'user' }] }
+      ]
+    });
+    
     if (!request) return res.status(404).json({ message: 'Request not found' });
     
-    if (req.body.status) {
+    let adminImageUrl = null;
+    if (req.file) {
+      adminImageUrl = `/uploads/maintenance/${req.file.filename}`;
+      const currentImages = request.images || [];
+      request.images = [...currentImages, { type: 'admin', url: adminImageUrl }];
+    }
+    
+    let statusChanged = false;
+    if (req.body.status && request.status !== req.body.status) {
       request.status = req.body.status;
+      statusChanged = true;
     }
     
     await request.save();
+
+    // Send LINE Notification
+    if ((statusChanged || adminImageUrl) && request.Tenant?.user?.line_user_id) {
+      const statusMap = {
+        'pending': 'รอดำเนินการ',
+        'in_progress': 'กำลังดำเนินการซ่อม',
+        'completed': 'ซ่อมเสร็จสิ้น',
+        'cancelled': 'ยกเลิก'
+      };
+      
+      const messages = [];
+      
+      let textMsg = `🛠️ อัปเดตสถานะการแจ้งซ่อมห้อง ${request.Room?.room_number || '-'}\nสถานะปัจจุบัน: ${statusMap[request.status] || request.status}`;
+      if (req.body.status === 'completed') textMsg += '\n\n✅ ทางเราได้ดำเนินการซ่อมแซมให้เรียบร้อยแล้ว ขอบคุณที่ใช้บริการครับ';
+      
+      messages.push({ type: 'text', text: textMsg });
+      
+      if (adminImageUrl) {
+        const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
+        const fullImageUrl = `${appUrl}${adminImageUrl}`;
+        messages.push({
+          type: 'image',
+          originalContentUrl: fullImageUrl,
+          previewImageUrl: fullImageUrl
+        });
+      }
+      
+      try {
+        await client.pushMessage({
+          to: request.Tenant.user.line_user_id,
+          messages
+        });
+      } catch (err) {
+        console.error('Failed to send LINE notification for maintenance:', err);
+      }
+    }
+    
     res.json(request);
   } catch (error) {
     res.status(500).json({ message: error.message });

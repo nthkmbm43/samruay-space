@@ -13,6 +13,8 @@ export default function MaintenancePage() {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [rooms, setRooms] = useState([]);
 
   // Form state
@@ -60,16 +62,46 @@ export default function MaintenancePage() {
     }
   };
 
-  const handleUpdateStatus = async (id: number, newStatus: string) => {
+  // Update state
+  const [updateStatus, setUpdateStatus] = useState('');
+  const [updateImage, setUpdateImage] = useState<File | null>(null);
+
+  const handleOpenUpdateDialog = (req: any) => {
+    setSelectedRequest(req);
+    setUpdateStatus(req.status);
+    setUpdateImage(null);
+    setIsUpdateDialogOpen(true);
+  };
+
+  const handleUpdateStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRequest) return;
+    setSaving(true);
     try {
-      await fetchApi(`/maintenance/${id}/status`, { 
+      const formData = new FormData();
+      formData.append('status', updateStatus);
+      if (updateImage) {
+        formData.append('image', updateImage);
+      }
+
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/maintenance/${selectedRequest.id}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: newStatus })
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
       });
+
+      if (!res.ok) throw new Error('Failed to update status');
+
       toast.success(t('statusUpdated') || 'อัปเดตสถานะสำเร็จ');
+      setIsUpdateDialogOpen(false);
       loadData();
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -110,6 +142,48 @@ export default function MaintenancePage() {
                 <Button type="submit" disabled={saving}>
                   {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   {t('submitTicket')}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isUpdateDialogOpen && selectedRequest && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl p-6 w-full max-w-md shadow-lg border">
+            <h3 className="text-lg font-bold mb-4">อัปเดตสถานะแจ้งซ่อม</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              เรื่อง: {selectedRequest.title}<br/>
+              ห้อง: {selectedRequest.Room?.room_number}
+            </p>
+            <form onSubmit={handleUpdateStatus} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">เปลี่ยนสถานะ</label>
+                <select value={updateStatus} onChange={e => setUpdateStatus(e.target.value)} className="w-full mt-1 border rounded-md px-3 py-2 bg-background">
+                  <option value="pending">{t('maintPending') || 'รอดำเนินการ'}</option>
+                  <option value="in_progress">{t('maintInProgress') || 'กำลังซ่อม'}</option>
+                  <option value="completed">{t('maintCompleted') || 'เสร็จสิ้น'}</option>
+                  <option value="cancelled">{t('maintCancelled') || 'ยกเลิก'}</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">แนบรูปภาพส่งให้ลูกบ้าน (ถ้ามี)</label>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={e => setUpdateImage(e.target.files?.[0] || null)}
+                  className="w-full mt-1 text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  ภาพนี้จะถูกส่งแจ้งเตือนให้ลูกบ้านทาง LINE อัตโนมัติ (เช่น ภาพตอนซ่อมเสร็จ)
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="ghost" onClick={() => setIsUpdateDialogOpen(false)}>{t('cancel')}</Button>
+                <Button type="submit" disabled={saving}>
+                  {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  บันทึกและแจ้งเตือน
                 </Button>
               </div>
             </form>
@@ -163,16 +237,9 @@ export default function MaintenancePage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <select 
-                      className="border border-border rounded-md px-2 py-1.5 text-sm bg-background font-medium shadow-sm hover:border-primary transition-colors focus:ring-1 focus:ring-primary focus:outline-none"
-                      value={req.status}
-                      onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
-                    >
-                      <option value="pending">{t('maintPending') || 'รอดำเนินการ'}</option>
-                      <option value="in_progress">{t('maintInProgress') || 'กำลังซ่อม'}</option>
-                      <option value="completed">{t('maintCompleted') || 'เสร็จสิ้น'}</option>
-                      <option value="cancelled">{t('maintCancelled') || 'ยกเลิก'}</option>
-                    </select>
+                    <Button variant="ghost" size="sm" className="h-8 border hover:bg-muted" onClick={() => handleOpenUpdateDialog(req)}>
+                      {t('update')}
+                    </Button>
                   </td>
                 </tr>
               ))}

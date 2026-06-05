@@ -166,17 +166,18 @@ async function handleIncomingText(lineUserId, text, replyToken) {
       }
 
       if (currentState.step === 'WAITING_MAINTENANCE_DETAIL') {
-        chatState.delete(lineUserId);
-        
-        await MaintenanceRequest.create({
+        const newReq = await MaintenanceRequest.create({
           property_id: tenant?.room?.property_id || 1,
           room_id: tenant?.room_id,
           tenant_id: tenant?.id,
           title: 'แจ้งซ่อมจาก LINE',
           description: text,
           status: 'pending',
-          priority: 'medium'
+          priority: 'medium',
+          images: []
         });
+
+        chatState.set(lineUserId, { step: 'WAITING_MAINTENANCE_MORE_IMAGES', requestId: newReq.id, timestamp: Date.now() });
 
         const { Notification } = require('../models');
         await Notification.create({
@@ -186,7 +187,17 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           action_url: '/maintenance'
         });
 
-        return await replyText(replyToken, '✅ รับเรื่องแจ้งซ่อมเรียบร้อยครับ ทางแอดมินจะรีบตรวจสอบและส่งช่างเข้าไปดำเนินการครับ');
+        return await replyText(replyToken, '✅ รับเรื่องแจ้งซ่อมเรียบร้อยครับ\nหากมีรูปภาพประกอบการซ่อม สามารถส่งรูปมาในแชทนี้ได้เลยครับ');
+      }
+
+      if (currentState.step === 'WAITING_MAINTENANCE_MORE_DETAILS') {
+        const request = await MaintenanceRequest.findByPk(currentState.requestId);
+        if (request) {
+          request.description = (request.description && request.description !== 'แจ้งซ่อมด้วยภาพ' ? request.description + '\n' : '') + text;
+          await request.save();
+        }
+        chatState.delete(lineUserId);
+        return await replyText(replyToken, '✅ บันทึกรายละเอียดเพิ่มเติมเรียบร้อยครับ');
       }
     } // End of State Machine
 
@@ -454,7 +465,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
 
       case 'แจ้งซ่อม':
         chatState.set(lineUserId, { step: 'WAITING_MAINTENANCE_DETAIL', timestamp: Date.now() });
-        return await replyText(replyToken, '🛠️ คุณต้องการแจ้งซ่อมเรื่องอะไรคะ?\n(พิมพ์รายละเอียดส่งมาในแชทนี้ได้เลยค่ะ เช่น แอร์ไม่เย็น, ท่อน้ำซึม)');
+        return await replyText(replyToken, '🛠️ คุณต้องการแจ้งซ่อมเรื่องอะไรคะ?\n(พิมพ์รายละเอียด หรือส่งรูปภาพสถานที่ชำรุดมาในแชทนี้ได้เลยค่ะ)');
 
       case 'ข่าวสาร / โปรโมชั่น':
       case 'ข่าวสาร':
@@ -505,6 +516,69 @@ async function handleIncomingImage(lineUserId, messageId, replyToken) {
     if (!tenant) {
       await replyText(replyToken, '❌ ไม่พบข้อมูลการเช่าห้องของคุณในระบบ');
       return;
+    }
+
+    const currentState = chatState.get(lineUserId);
+
+    if (currentState && currentState.step === 'WAITING_MAINTENANCE_DETAIL') {
+      const stream = await blobClient.getMessageContent(messageId);
+      const ext = 'jpg';
+      const filename = `maint-${Date.now()}.${ext}`;
+      const dir = path.join(__dirname, '../../uploads/maintenance');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const filePath = path.join(dir, filename);
+      
+      const chunks = [];
+      for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+      fs.writeFileSync(filePath, Buffer.concat(chunks));
+
+      const imageUrl = `/uploads/maintenance/${filename}`;
+
+      const newReq = await MaintenanceRequest.create({
+        property_id: tenant?.room?.property_id || 1,
+        room_id: tenant?.room_id,
+        tenant_id: tenant?.id,
+        title: 'แจ้งซ่อมจาก LINE',
+        description: 'แจ้งซ่อมด้วยภาพ',
+        status: 'pending',
+        priority: 'medium',
+        images: [{ type: 'tenant', url: imageUrl }]
+      });
+
+      chatState.set(lineUserId, { step: 'WAITING_MAINTENANCE_MORE_DETAILS', requestId: newReq.id, timestamp: Date.now() });
+
+      const { Notification } = require('../models');
+      await Notification.create({
+        title: 'แจ้งซ่อมใหม่',
+        message: `ห้อง ${tenant?.room?.room_number || 'ไม่ทราบ'} ส่งภาพแจ้งซ่อม`,
+        type: 'maintenance',
+        action_url: '/maintenance'
+      });
+
+      return await replyText(replyToken, '✅ รับเรื่องแจ้งซ่อมเรียบร้อยครับ\nหากมีรายละเอียดเพิ่มเติม สามารถพิมพ์บอกมาในแชทได้เลยครับ');
+    }
+
+    if (currentState && currentState.step === 'WAITING_MAINTENANCE_MORE_IMAGES') {
+      const request = await MaintenanceRequest.findByPk(currentState.requestId);
+      if (request) {
+         const stream = await blobClient.getMessageContent(messageId);
+         const ext = 'jpg';
+         const filename = `maint-${Date.now()}.${ext}`;
+         const dir = path.join(__dirname, '../../uploads/maintenance');
+         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+         const filePath = path.join(dir, filename);
+         
+         const chunks = [];
+         for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+         fs.writeFileSync(filePath, Buffer.concat(chunks));
+ 
+         const imageUrl = `/uploads/maintenance/${filename}`;
+         const currentImages = request.images || [];
+         request.images = [...currentImages, { type: 'tenant', url: imageUrl }];
+         await request.save();
+      }
+      chatState.delete(lineUserId);
+      return await replyText(replyToken, '✅ บันทึกรูปภาพประกอบเรียบร้อยครับ แอดมินจะรีบตรวจสอบครับ');
     }
 
     const { Op } = require('sequelize');
