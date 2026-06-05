@@ -164,7 +164,7 @@ export default function PromotionsPage() {
             <div key={promo.id} className="bg-card rounded-xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow">
               {promo.image_url ? (
                 <div className="aspect-video w-full relative overflow-hidden bg-muted">
-                  <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}${promo.image_url}`} alt={promo.name} className="object-cover w-full h-full" />
+                  <img src={`${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace('/api', '')}${promo.image_url}`} alt={promo.name} className="object-cover w-full h-full" />
                 </div>
               ) : (
                 <div className="aspect-video w-full bg-primary/10 flex items-center justify-center">

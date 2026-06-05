@@ -7,4 +7,7 @@ router.route('/')
   .get(protect, maintenanceController.getAllRequests)
   .post(protect, maintenanceController.createRequest);
 
+router.route('/:id/status')
+  .patch(protect, maintenanceController.updateRequestStatus);
+
 module.exports = router;

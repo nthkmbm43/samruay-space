@@ -60,6 +60,16 @@ export default function MaintenancePage() {
     }
   };
 
+  const handleUpdateStatus = async (id: number) => {
+    try {
+      await fetchApi(`/maintenance/${id}/status`, { method: 'PATCH' });
+      toast.success(t('statusUpdated') || 'อัปเดตสถานะสำเร็จ');
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -150,7 +160,9 @@ export default function MaintenancePage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <Button variant="ghost" size="sm" className="h-8">{t('update')}</Button>
+                    <Button variant="ghost" size="sm" className="h-8" onClick={() => handleUpdateStatus(req.id)}>
+                      {t('update')}
+                    </Button>
                   </td>
                 </tr>
               ))}

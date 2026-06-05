@@ -1,4 +1,4 @@
-const { Invoice, Payment, Room, Contract, MeterReading } = require('../models');
+const { Invoice, Payment, Room, Contract, MeterReading, Tenant, Setting } = require('../models');
 const { Op } = require('sequelize');
 
 exports.getAllInvoices = async (req, res) => {
@@ -74,10 +74,11 @@ exports.generateInvoices = async (req, res) => {
         }
       });
 
-      // Default rates if not set in settings (in a real app, fetch from Setting model)
-      const water_rate = 18; 
-      const elec_rate = 8;
+      const waterRateSetting = await Setting.findOne({ where: { key: 'WATER_RATE' } });
+      const electricRateSetting = await Setting.findOne({ where: { key: 'ELECTRIC_RATE' } });
       
+      const water_rate = waterRateSetting ? parseFloat(waterRateSetting.value) : 18; 
+      const elec_rate = electricRateSetting ? parseFloat(electricRateSetting.value) : 8;
       let water_amount = 0;
       let elec_amount = 0;
       let water_units = 0;

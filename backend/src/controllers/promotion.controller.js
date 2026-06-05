@@ -60,7 +60,7 @@ exports.deletePromotion = async (req, res) => {
     }
     
     if (promotion.image_url) {
-      const filePath = path.join(__dirname, '../../public', promotion.image_url);
+      const filePath = path.join(__dirname, '../..', promotion.image_url);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
