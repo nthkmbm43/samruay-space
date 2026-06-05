@@ -21,7 +21,7 @@ const Payment = sequelize.define('Payment', {
     allowNull: false
   },
   method: {
-    type: DataTypes.STRING(20),
+    type: DataTypes.STRING(50),
     allowNull: false
   },
   payment_date: {
@@ -49,7 +49,7 @@ const Payment = sequelize.define('Payment', {
     allowNull: true
   },
   status: {
-    type: DataTypes.STRING(20),
+    type: DataTypes.STRING(50),
     defaultValue: 'confirmed'
   }
 }, {
