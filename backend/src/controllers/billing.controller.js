@@ -267,7 +267,7 @@ exports.getMeters = async (req, res) => {
   try {
     const { MeterReading, Room } = require('../models');
     const readings = await MeterReading.findAll({
-      include: [{ model: Room, as: 'room', attributes: ['room_number'] }],
+      include: [{ model: Room, attributes: ['room_number'] }],
       order: [['period_year', 'DESC'], ['period_month', 'DESC']]
     });
     res.json(readings);

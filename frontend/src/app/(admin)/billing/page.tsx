@@ -209,7 +209,7 @@ export default function BillingPage() {
               <tbody className="divide-y">
                 {meters.length > 0 ? meters.map((m: any) => (
                   <tr key={m.id} className="bg-card hover:bg-muted/50 transition-colors">
-                    <td className="px-6 py-4 font-medium">{m.room?.room_number || m.room_id}</td>
+                    <td className="px-6 py-4 font-medium">{m.Room?.room_number || m.room?.room_number || m.room_id}</td>
                     <td className="px-6 py-4">{m.period_month}/{m.period_year}</td>
                     <td className="px-6 py-4 text-center text-blue-600 font-semibold">{m.water_units}</td>
                     <td className="px-6 py-4 text-center text-orange-600 font-semibold">{m.elec_units}</td>
