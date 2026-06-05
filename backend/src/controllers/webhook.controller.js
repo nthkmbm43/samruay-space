@@ -402,6 +402,45 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           ]
         });
 
+      case 'เสกบิล':
+        const roomPrice = parseFloat(tenant.Room?.price_override || 1500);
+        
+        // Month 4 (Paid)
+        await Invoice.create({
+          invoice_number: `INV-202604-${tenant.Room?.room_number || tenant.room_id}`,
+          property_id: tenant.Room?.property_id || 1,
+          room_id: tenant.room_id,
+          tenant_id: tenant.id,
+          period_month: 4,
+          period_year: 2026,
+          issue_date: new Date('2026-04-25'),
+          due_date: new Date('2026-05-05'),
+          room_price: roomPrice,
+          water_previous: 100, water_current: 105, water_units: 5, water_rate: 20, water_amount: 100,
+          elec_previous: 1000, elec_current: 1100, elec_units: 100, elec_rate: 8, elec_amount: 800,
+          subtotal: roomPrice + 100 + 800, total: roomPrice + 100 + 800,
+          status: 'paid', notes: 'บิลเดือนเมษายน 2026'
+        }).catch(err => console.log('Mock Apr error:', err));
+
+        // Month 5 (Pending)
+        await Invoice.create({
+          invoice_number: `INV-202605-${tenant.Room?.room_number || tenant.room_id}`,
+          property_id: tenant.Room?.property_id || 1,
+          room_id: tenant.room_id,
+          tenant_id: tenant.id,
+          period_month: 5,
+          period_year: 2026,
+          issue_date: new Date('2026-05-25'),
+          due_date: new Date('2026-06-05'),
+          room_price: roomPrice,
+          water_previous: 105, water_current: 112, water_units: 7, water_rate: 20, water_amount: 140,
+          elec_previous: 1100, elec_current: 1250, elec_units: 150, elec_rate: 8, elec_amount: 1200,
+          subtotal: roomPrice + 140 + 1200, total: roomPrice + 140 + 1200,
+          status: 'pending', notes: 'บิลเดือนพฤษภาคม 2026'
+        }).catch(err => console.log('Mock May error:', err));
+        
+        return await replyText(replyToken, '✨ เสกบิลจำลองของเดือน 4 และ 5 สำเร็จเรียบร้อยแล้วค่ะ!\n\nลองกดปุ่ม "ดูบิล / ค่าเช่า" อีกครั้งได้เลยค่ะ');
+
       case 'แจ้งชำระเงิน':
         return await replyText(replyToken, 'กรุณาส่งรูปภาพสลิปโอนเงิน หรือหลักฐานการชำระเงินเข้ามาในแชทนี้ได้เลยค่ะ ทางเราจะรีบตรวจสอบให้ทันทีครับ');
 
