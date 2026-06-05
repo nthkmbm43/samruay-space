@@ -8,6 +8,7 @@ const lineConfig = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || '',
 };
 const client = new line.messagingApi.MessagingApiClient(lineConfig);
+const blobClient = new line.messagingApi.MessagingApiBlobClient(lineConfig);
 
 // Simple In-Memory State for Chatbot (Ideally use Redis in production)
 const chatState = new Map();
@@ -291,7 +292,7 @@ async function handleIncomingImage(lineUserId, messageId, replyToken) {
     }
 
     // Download image from LINE as buffer
-    const stream = await client.getMessageContent(messageId);
+    const stream = await blobClient.getMessageContent(messageId);
     const buffer = await new Promise((resolve, reject) => {
       const chunks = [];
       stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
