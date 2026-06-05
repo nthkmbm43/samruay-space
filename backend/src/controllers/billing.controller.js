@@ -74,11 +74,11 @@ exports.generateInvoices = async (req, res) => {
         }
       });
 
-      const waterRateSetting = await Setting.findOne({ where: { key: 'WATER_RATE' } });
-      const electricRateSetting = await Setting.findOne({ where: { key: 'ELECTRIC_RATE' } });
+      const waterRateSetting = await Setting.findOne({ where: { key: 'water_rate' } });
+      const electricRateSetting = await Setting.findOne({ where: { key: 'elec_rate' } });
       
-      const water_rate = waterRateSetting ? parseFloat(waterRateSetting.value) : 18; 
-      const elec_rate = electricRateSetting ? parseFloat(electricRateSetting.value) : 8;
+      const water_rate = waterRateSetting ? parseFloat(waterRateSetting.value) : 0; 
+      const elec_rate = electricRateSetting ? parseFloat(electricRateSetting.value) : 0;
       let water_amount = 0;
       let elec_amount = 0;
       let water_units = 0;

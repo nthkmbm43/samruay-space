@@ -31,12 +31,10 @@ exports.updateRequestStatus = async (req, res) => {
     const request = await MaintenanceRequest.findByPk(req.params.id);
     if (!request) return res.status(404).json({ message: 'Request not found' });
     
-    // Cycle status: pending -> in_progress -> completed -> pending
-    let newStatus = 'in_progress';
-    if (request.status === 'in_progress') newStatus = 'completed';
-    else if (request.status === 'completed') newStatus = 'pending';
+    if (req.body.status) {
+      request.status = req.body.status;
+    }
     
-    request.status = newStatus;
     await request.save();
     res.json(request);
   } catch (error) {

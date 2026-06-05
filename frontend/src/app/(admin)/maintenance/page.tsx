@@ -60,9 +60,12 @@ export default function MaintenancePage() {
     }
   };
 
-  const handleUpdateStatus = async (id: number) => {
+  const handleUpdateStatus = async (id: number, newStatus: string) => {
     try {
-      await fetchApi(`/maintenance/${id}/status`, { method: 'PATCH' });
+      await fetchApi(`/maintenance/${id}/status`, { 
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus })
+      });
       toast.success(t('statusUpdated') || 'อัปเดตสถานะสำเร็จ');
       loadData();
     } catch (err: any) {
@@ -160,9 +163,16 @@ export default function MaintenancePage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <Button variant="ghost" size="sm" className="h-8" onClick={() => handleUpdateStatus(req.id)}>
-                      {t('update')}
-                    </Button>
+                    <select 
+                      className="border border-border rounded-md px-2 py-1.5 text-sm bg-background font-medium shadow-sm hover:border-primary transition-colors focus:ring-1 focus:ring-primary focus:outline-none"
+                      value={req.status}
+                      onChange={(e) => handleUpdateStatus(req.id, e.target.value)}
+                    >
+                      <option value="pending">{t('maintPending') || 'รอดำเนินการ'}</option>
+                      <option value="in_progress">{t('maintInProgress') || 'กำลังซ่อม'}</option>
+                      <option value="completed">{t('maintCompleted') || 'เสร็จสิ้น'}</option>
+                      <option value="cancelled">{t('maintCancelled') || 'ยกเลิก'}</option>
+                    </select>
                   </td>
                 </tr>
               ))}
