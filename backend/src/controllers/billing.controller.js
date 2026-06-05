@@ -14,7 +14,8 @@ exports.getAllInvoices = async (req, res) => {
     const invoices = await Invoice.findAll({
       where: whereClause,
       include: [
-        { model: Room, attributes: ['room_number'] }
+        { model: Room, attributes: ['room_number'] },
+        { model: Payment }
       ],
       order: [['created_at', 'DESC']]
     });
@@ -171,6 +172,94 @@ exports.recordPayment = async (req, res) => {
     res.status(201).json({ message: 'Payment recorded', payment, invoice });
   } catch (error) {
     console.error('Record payment error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.verifyInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, paid_amount, reason } = req.body;
+    
+    const invoice = await Invoice.findByPk(id, {
+      include: [
+        { model: Room },
+        { model: require('../models').Tenant, include: [{ model: require('../models').User, as: 'user' }] }
+      ]
+    });
+
+    if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+
+    const { sendPushMessage } = require('./webhook.controller');
+    const userId = invoice.Tenant?.user?.id;
+
+    if (status === 'paid') {
+      invoice.status = 'paid';
+      invoice.paid_amount = invoice.total;
+      invoice.paid_at = new Date();
+      
+      if (invoice.Room && invoice.Room.status === 'reserved') {
+        await invoice.Room.update({ status: 'occupied' });
+      }
+
+      if (userId) {
+        await sendPushMessage(userId, '✅ ได้รับยอดเงินเรียบร้อย เข้าอยู่ได้เลยครับ!');
+      }
+    } else if (status === 'partial') {
+      invoice.status = 'partial';
+      invoice.paid_amount = Number(paid_amount) || 0;
+      
+      const missingAmount = Number(invoice.total) - invoice.paid_amount;
+      if (userId) {
+        await sendPushMessage(userId, `⚠️ ยอดเงินขาดอีก ${missingAmount} บาท\nเหตุผล: ${reason || 'โอนไม่ครบ'}\n\nกรุณาแนบสลิปยอดที่เหลือส่งกลับมาในแชทนี้ได้เลยครับ`);
+      }
+    } else if (status === 'pending') {
+      invoice.status = 'pending'; // Reset back to pending so they can re-upload
+      if (userId) {
+        await sendPushMessage(userId, `❌ สลิปไม่ถูกต้อง\nเหตุผล: ${reason || 'ข้อมูลในสลิปไม่ชัดเจน'}\n\nกรุณาแนบรูปสลิปใหม่ส่งกลับมาในแชทนี้ได้เลยครับ`);
+      }
+    }
+
+    await invoice.save();
+    res.json({ message: 'Invoice verified successfully', invoice });
+  } catch (error) {
+    console.error('Verify invoice error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.recordMeters = async (req, res) => {
+  try {
+    const { period_month, period_year, readings } = req.body;
+    const { MeterReading } = require('../models');
+
+    for (const r of readings) {
+      if (r.water_units !== undefined || r.elec_units !== undefined) {
+        const existing = await MeterReading.findOne({
+          where: { room_id: r.room_id, period_month, period_year }
+        });
+
+        if (existing) {
+          existing.water_units = r.water_units ?? existing.water_units;
+          existing.elec_units = r.elec_units ?? existing.elec_units;
+          await existing.save();
+        } else {
+          await MeterReading.create({
+            room_id: r.room_id,
+            period_month,
+            period_year,
+            reading_date: new Date(),
+            water_units: r.water_units,
+            elec_units: r.elec_units,
+            recorded_by: req.user.id
+          });
+        }
+      }
+    }
+
+    res.status(201).json({ message: 'Meters recorded successfully' });
+  } catch (error) {
+    console.error('Record meters error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

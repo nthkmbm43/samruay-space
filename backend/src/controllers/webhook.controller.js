@@ -147,7 +147,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         });
 
         chatState.delete(lineUserId);
-        return await replyText(replyToken, `🎉 ยินดีด้วยครับ! คุณได้สิทธิ์จองห้อง ${room.room_number} เรียบร้อยแล้วครับ\n\nยอดที่ต้องชำระเพื่อยืนยันสิทธิ์ภายใน 3 วันคือ:\n- ค่าประกัน: 1,000 บาท\n- ค่าเช่าล่วงหน้า: ${advanceRent} บาท\nรวมเป็นยอดสุทธิ: ${totalAmount} บาท\n\nสามารถโอนเงินและส่งรูปสลิปในแชทนี้ได้เลยครับ!`);
+        return await replyText(replyToken, `🎉 ยินดีด้วยครับ! คุณได้สิทธิ์จองห้อง ${room.room_number} เรียบร้อยแล้วครับ\n\nยอดที่ต้องชำระเพื่อยืนยันสิทธิ์ภายใน 3 วันคือ:\n- ค่าประกัน: 1,000 บาท\n- ค่าเช่าล่วงหน้า: ${advanceRent} บาท\nสรุปยอดชำระคือ ${totalAmount} บาท\n\nสามารถโอนเข้าบัญชีด้านล่างนี้ และแนบรูปสลิปส่งกลับมาในแชทได้เลยค่ะ\n\n🏦 ธนาคาร: กรุงไทย\nเลขที่บัญชี: 4373134715\nชื่อบัญชี: ธนกฤต หมู่บ้านม่วง`);
       }
 
       if (currentState.step === 'WAITING_MAINTENANCE_DETAIL') {
@@ -244,15 +244,41 @@ async function handleIncomingImage(lineUserId, messageId, replyToken) {
     const tenant = await Tenant.findOne({ where: { user_id: user.id }, include: [{ model: Room, as: 'room' }] });
     if (!tenant) return;
 
-    // Find the latest pending invoice
+    const { Op } = require('sequelize');
     const pendingInvoice = await Invoice.findOne({ 
-      where: { tenant_id: tenant.id, status: 'pending' },
+      where: { tenant_id: tenant.id, status: { [Op.in]: ['pending', 'partial'] } },
       order: [['created_at', 'DESC']]
     });
 
     if (!pendingInvoice) {
       return await replyText(replyToken, 'คุณไม่มีบิลที่ต้องชำระในขณะนี้ครับ แต่เราบันทึกรูปภาพของคุณไว้แล้ว');
     }
+
+    // Download image from LINE
+    const stream = await client.getMessageContent(messageId);
+    const filename = `slip-${Date.now()}.jpg`;
+    const uploadsDir = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+    
+    const filepath = path.join(uploadsDir, filename);
+    const writeStream = fs.createWriteStream(filepath);
+    
+    stream.pipe(writeStream);
+    await new Promise((resolve, reject) => {
+      writeStream.on('finish', resolve);
+      writeStream.on('error', reject);
+    });
+
+    const slipUrl = `/uploads/${filename}`;
+
+    const { Payment } = require('../models');
+    await Payment.create({
+      invoice_id: pendingInvoice.id,
+      amount: pendingInvoice.total - (pendingInvoice.paid_amount || 0),
+      method: 'bank_transfer',
+      slip_image: slipUrl,
+      status: 'pending'
+    });
 
     pendingInvoice.status = 'awaiting_verification';
     await pendingInvoice.save();

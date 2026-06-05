@@ -13,7 +13,13 @@ router.route('/invoices/generate')
 router.route('/invoices/:id')
   .get(protect, billingController.getInvoiceById);
 
+router.route('/meters')
+  .post(protect, authorize('super_admin', 'admin'), billingController.recordMeters);
+
 router.route('/invoices/:id/payments')
   .post(protect, authorize('super_admin', 'admin'), billingController.recordPayment);
+
+router.route('/invoices/:id/verify')
+  .put(protect, authorize('super_admin', 'admin'), billingController.verifyInvoice);
 
 module.exports = router;
