@@ -231,6 +231,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
       case 'หน้าหลัก':
         return await replyText(replyToken, `สวัสดีค่ะคุณ ${user.first_name}\nหากต้องการแจ้งซ่อม ส่งสลิป หรือขอย้ายออก สามารถพิมพ์บอกในแชทนี้ได้เลยนะคะ`);
 
+      case 'ดูบิล / ค่าเช่า':
       case 'ดูบิล':
       case 'ค่าเช่า':
         const latestBill = await Invoice.findOne({ 
@@ -253,6 +254,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         chatState.set(lineUserId, { step: 'WAITING_MAINTENANCE_DETAIL', timestamp: Date.now() });
         return await replyText(replyToken, '🛠️ คุณต้องการแจ้งซ่อมเรื่องอะไรคะ?\n(พิมพ์รายละเอียดส่งมาในแชทนี้ได้เลยค่ะ เช่น แอร์ไม่เย็น, ท่อน้ำซึม)');
 
+      case 'ข่าวสาร / โปรโมชั่น':
       case 'ข่าวสาร':
         const promo = await Promotion.findOne({ order: [['created_at', 'DESC']] });
         if (promo) {
