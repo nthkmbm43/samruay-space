@@ -7,6 +7,7 @@ import { useTheme } from '@/components/theme-provider';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { usePathname } from 'next/navigation';
 import { NotificationDropdown } from './NotificationDropdown';
+import { useMobileMenu } from '@/contexts/MobileMenuContext';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -135,7 +136,7 @@ function GlobalSearch() {
 export function Header() {
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isOpen: mobileMenuOpen, toggle: toggleMobileMenu } = useMobileMenu();
 
   return (
     <header className="h-16 border-b bg-background/80 backdrop-blur-md flex items-center justify-between px-4 md:px-6 sticky top-0 z-20">
@@ -145,7 +146,7 @@ export function Header() {
           variant="ghost"
           size="icon"
           className="md:hidden"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          onClick={toggleMobileMenu}
         >
           <Menu className="w-5 h-5" />
         </Button>

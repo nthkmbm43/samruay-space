@@ -14,6 +14,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { siteConfig } from '@/config/site';
 import { cn } from '@/lib/utils';
 import { fetchApi } from '@/lib/api';
+import { useMobileMenu } from '@/contexts/MobileMenuContext';
 
 interface NavItem {
   name: string;
@@ -30,6 +31,7 @@ interface Property {
 
 export function Sidebar() {
   const { t } = useLanguage();
+  const { isOpen: mobileOpen, setIsOpen: setMobileOpen } = useMobileMenu();
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
@@ -50,6 +52,11 @@ export function Sidebar() {
     { name: 'รายงาน', href: '/reports', icon: BarChart3 },
     { name: t('settings'), href: '/settings', icon: Settings },
   ];
+
+  useEffect(() => {
+    // Auto-close mobile menu on route change
+    setMobileOpen(false);
+  }, [pathname, setMobileOpen]);
 
   useEffect(() => {
     // Load user from localStorage
@@ -108,14 +115,32 @@ export function Sidebar() {
 
   return (
     <>
+      {/* Mobile Overlay */}
+      {mobileOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden transition-opacity"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
         className={cn(
-          'hidden md:flex flex-col h-screen bg-sidebar border-r border-sidebar-border',
-          'transition-all duration-300 ease-in-out relative z-30 scrollbar-thin overflow-y-auto',
-          collapsed ? 'w-16' : 'w-64'
+          'flex flex-col h-screen bg-sidebar border-r border-sidebar-border',
+          'transition-all duration-300 ease-in-out fixed md:relative z-50 md:z-30 scrollbar-thin overflow-y-auto',
+          // Mobile positioning
+          mobileOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0',
+          // Desktop collapsed width
+          !mobileOpen && collapsed ? 'md:w-16' : 'md:w-64'
         )}
       >
+        {/* Mobile Close Button */}
+        <button
+          className="md:hidden absolute top-4 right-4 z-50 text-muted-foreground hover:text-foreground bg-sidebar/80 rounded-full p-1 backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+        >
+          <X className="w-5 h-5" />
+        </button>
         {/* Brand / Logo Area */}
         <div className="p-4 border-b flex items-center gap-3">
           {selectedProperty ? (
