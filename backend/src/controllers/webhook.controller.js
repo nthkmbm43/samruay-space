@@ -584,14 +584,14 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           const promo = activePromotions[0];
           const messages = [];
           if (promo.image_url) {
-            const imageUrl = promo.image_url.startsWith('data:') ? null : `${promoAppUrl}${promo.image_url}`;
-            if (imageUrl) {
-              messages.push({
-                type: 'image',
-                originalContentUrl: imageUrl,
-                previewImageUrl: imageUrl
-              });
-            }
+            const imageUrl = promo.image_url.startsWith('data:') 
+              ? `${promoAppUrl}/api/promotions/image/${promo.id}` 
+              : `${promoAppUrl}${promo.image_url}`;
+            messages.push({
+              type: 'image',
+              originalContentUrl: imageUrl,
+              previewImageUrl: imageUrl
+            });
           }
           messages.push({
             type: 'text',
@@ -601,8 +601,8 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         } else {
           // Multiple promotions -> Flex Message Carousel
           const bubbles = activePromotions.map(promo => {
-            const imageUrl = promo.image_url && !promo.image_url.startsWith('data:') 
-              ? `${promoAppUrl}${promo.image_url}` 
+            const imageUrl = promo.image_url
+              ? (promo.image_url.startsWith('data:') ? `${promoAppUrl}/api/promotions/image/${promo.id}` : `${promoAppUrl}${promo.image_url}`)
               : 'https://samruay-space.vercel.app/logo.png'; // Fallback
 
             return {
