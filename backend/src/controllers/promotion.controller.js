@@ -4,10 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const line = require('@line/bot-sdk');
 
-const lineConfig = {
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || '',
-};
-const client = new line.messagingApi.MessagingApiClient(lineConfig);
+// Helper: create LINE client dynamically per property
+async function getLineClient(propertyId) {
+  const property = propertyId ? await Property.findByPk(propertyId) : null;
+  const token = property?.line_channel_access_token || process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
+  return new line.messagingApi.MessagingApiClient({ channelAccessToken: token });
+}
 
 exports.getAllPromotions = async (req, res) => {
   try {
@@ -186,7 +188,8 @@ exports.broadcastPromotion = async (req, res) => {
     const textMessage = `📣 ประกาศ/โปรโมชั่น:\n${promotion.name}\n${promotion.description || ''}`;
     messages.push({ type: 'text', text: textMessage });
 
-    await client.broadcast({ messages });
+    const dynamicClient = await getLineClient(promotion.property_id);
+    await dynamicClient.broadcast({ messages });
 
     res.json({ message: 'Broadcasted successfully' });
   } catch (error) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Building2, MapPin, Plus, Loader2, WifiOff, X } from 'lucide-react';
+import { Building2, MapPin, Plus, Loader2, WifiOff, X, MessageCircle, Eye, EyeOff } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'react-hot-toast';
@@ -15,6 +15,8 @@ export default function PropertiesPage() {
   const [offline, setOffline] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [viewingProperty, setViewingProperty] = useState<any>(null);
+  const [showToken, setShowToken] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
   
   // Form state
   const [name, setName] = useState('');
@@ -71,7 +73,9 @@ export default function PropertiesPage() {
           name: viewingProperty.name, 
           address: viewingProperty.address,
           phone: viewingProperty.phone,
-          is_active: viewingProperty.is_active
+          is_active: viewingProperty.is_active,
+          line_channel_access_token: viewingProperty.line_channel_access_token || '',
+          line_channel_secret: viewingProperty.line_channel_secret || ''
         })
       });
       toast.success('อัปเดตหอพักสำเร็จ');
@@ -132,7 +136,7 @@ export default function PropertiesPage() {
       {/* ── Edit Property Modal ── */}
       {viewingProperty && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border rounded-2xl p-6 w-full max-w-md shadow-2xl" style={{ animation: 'fade-in-up 0.25s ease-out' }}>
+          <div className="bg-card border rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto" style={{ animation: 'fade-in-up 0.25s ease-out' }}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="font-bold text-lg">{t('editPropertyTitle')}</h3>
               <button onClick={() => setViewingProperty(null)} className="w-7 h-7 rounded-full hover:bg-muted flex items-center justify-center">
@@ -159,6 +163,47 @@ export default function PropertiesPage() {
                   <div className="text-xs text-muted-foreground">เปิดใช้งานสาขานี้ในระบบ</div>
                 </div>
               </label>
+
+              {/* ── LINE Bot Configuration ── */}
+              <div className="pt-4 mt-2 border-t">
+                <div className="flex items-center gap-2 mb-4">
+                  <MessageCircle className="w-4 h-4 text-[#00B900]" />
+                  <span className="text-sm font-semibold">ตั้งค่า LINE Bot</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Channel Access Token</label>
+                    <div className="relative">
+                      <input
+                        type={showToken ? 'text' : 'password'}
+                        value={viewingProperty.line_channel_access_token || ''}
+                        onChange={e => setViewingProperty({...viewingProperty, line_channel_access_token: e.target.value})}
+                        className="w-full border rounded-xl px-4 py-2.5 pr-10 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#00B900]/40"
+                        placeholder="กรอก Channel Access Token จาก LINE Developer"
+                      />
+                      <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Channel Secret</label>
+                    <div className="relative">
+                      <input
+                        type={showSecret ? 'text' : 'password'}
+                        value={viewingProperty.line_channel_secret || ''}
+                        onChange={e => setViewingProperty({...viewingProperty, line_channel_secret: e.target.value})}
+                        className="w-full border rounded-xl px-4 py-2.5 pr-10 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#00B900]/40"
+                        placeholder="กรอก Channel Secret จาก LINE Developer"
+                      />
+                      <button type="button" onClick={() => setShowSecret(!showSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">ดึงค่าเหล่านี้จาก LINE Developers Console &gt; Messaging API</p>
+                </div>
+              </div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="ghost" onClick={() => setViewingProperty(null)}>{t('cancel')}</Button>
                 <Button type="submit" disabled={saving} className="gradient-btn text-white gap-2">

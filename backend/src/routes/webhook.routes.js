@@ -10,13 +10,22 @@ const dynamicLineMiddleware = async (req, res, next) => {
   const propertyId = req.params.property_id;
   try {
     const property = await Property.findByPk(propertyId);
-    if (!property || !property.line_channel_secret) {
-      return res.status(404).send('Property not found or LINE not configured');
+    if (!property) {
+      return res.status(404).send('Property not found');
+    }
+
+    // Use property-level credentials first, then fallback to .env
+    const channelSecret = property.line_channel_secret || process.env.LINE_CHANNEL_SECRET;
+    const channelAccessToken = property.line_channel_access_token || process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
+
+    if (!channelSecret) {
+      console.error(`[Webhook] No LINE Channel Secret for property ${propertyId} and none in .env`);
+      return res.status(400).send('LINE not configured: missing channel secret');
     }
     
     const lineConfig = {
-      channelAccessToken: property.line_channel_access_token,
-      channelSecret: property.line_channel_secret
+      channelAccessToken,
+      channelSecret
     };
     
     // Attach the config and property to req for later use in controller

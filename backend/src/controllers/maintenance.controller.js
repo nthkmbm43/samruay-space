@@ -1,10 +1,12 @@
-const { MaintenanceRequest, Room, Tenant, User } = require('../models');
+const { MaintenanceRequest, Room, Tenant, User, Property } = require('../models');
 const line = require('@line/bot-sdk');
 
-const lineConfig = {
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || '',
-};
-const client = new line.messagingApi.MessagingApiClient(lineConfig);
+// Helper: create LINE client dynamically per property
+async function getLineClient(propertyId) {
+  const property = propertyId ? await Property.findByPk(propertyId) : null;
+  const token = property?.line_channel_access_token || process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
+  return new line.messagingApi.MessagingApiClient({ channelAccessToken: token });
+}
 
 exports.getAllRequests = async (req, res) => {
   try {
@@ -117,7 +119,8 @@ exports.updateRequestStatus = async (req, res) => {
       }
       
       try {
-        await client.pushMessage({
+        const dynamicClient = await getLineClient(request.Room?.property_id);
+        await dynamicClient.pushMessage({
           to: request.Tenant.user.line_user_id,
           messages
         });

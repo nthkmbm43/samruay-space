@@ -847,6 +847,7 @@ exports.sendPushMessage = async (userId, text) => {
 };
 
 async function executeMonthlyBooking(lineUserId, replyToken, data, room) {
+  const { client } = webhookContext.getStore();
   const { first_name, last_name, phone } = data;
   
   let dbUser = await User.findOne({ where: { phone } });
@@ -887,6 +888,7 @@ async function executeMonthlyBooking(lineUserId, replyToken, data, room) {
 }
 
 async function executeDailyBooking(lineUserId, replyToken, data, room) {
+  const { client } = webhookContext.getStore();
   const { first_name, last_name, phone, check_in_date, nights } = data;
   
   let dbUser = await User.findOne({ where: { phone } });
