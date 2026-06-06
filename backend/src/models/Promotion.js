@@ -72,6 +72,10 @@ const Promotion = sequelize.define('Promotion', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
+  is_active_auto: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
   created_by: {
     type: DataTypes.INTEGER,
     references: {

@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const maintenanceController = require('../controllers/maintenance.controller');
 const { protect } = require('../middlewares/auth.middleware');
+const { authorize } = require('../middlewares/role.middleware');
+const { checkPropertyStatus } = require('../middlewares/property.middleware');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -18,11 +20,19 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+router.use(protect);
+router.use(checkPropertyStatus);
+
 router.route('/')
-  .get(protect, maintenanceController.getAllRequests)
-  .post(protect, maintenanceController.createRequest);
+  .get(maintenanceController.getAllRequests)
+  .post(maintenanceController.createRequest);
+
+router.route('/:id')
+  .get(maintenanceController.getRequestById)
+  .put(maintenanceController.updateRequest)
+  .delete(authorize('super_admin', 'admin'), maintenanceController.deleteRequest);
 
 router.route('/:id/status')
-  .patch(protect, upload.single('image'), maintenanceController.updateRequestStatus);
+  .patch(upload.single('image'), maintenanceController.updateRequestStatus);
 
 module.exports = router;

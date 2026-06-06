@@ -19,6 +19,14 @@ const Property = sequelize.define('Property', {
     type: DataTypes.STRING(200),
     allowNull: false
   },
+  updated_by: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  is_active: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  },
   address: {
     type: DataTypes.TEXT,
     allowNull: true
@@ -51,9 +59,13 @@ const Property = sequelize.define('Property', {
     type: DataTypes.STRING(20),
     allowNull: true
   },
-  is_active: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
+  line_channel_access_token: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  line_channel_secret: {
+    type: DataTypes.STRING(100),
+    allowNull: true
   }
 }, {
   tableName: 'properties',

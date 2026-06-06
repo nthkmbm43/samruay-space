@@ -32,6 +32,38 @@ exports.createRequest = async (req, res) => {
   }
 };
 
+exports.getRequestById = async (req, res) => {
+  try {
+    const request = await MaintenanceRequest.findByPk(req.params.id);
+    if (!request) return res.status(404).json({ message: 'Not found' });
+    res.json(request);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.updateRequest = async (req, res) => {
+  try {
+    const request = await MaintenanceRequest.findByPk(req.params.id);
+    if (!request) return res.status(404).json({ message: 'Not found' });
+    await request.update(req.body);
+    res.json(request);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.deleteRequest = async (req, res) => {
+  try {
+    const request = await MaintenanceRequest.findByPk(req.params.id);
+    if (!request) return res.status(404).json({ message: 'Not found' });
+    await request.destroy();
+    res.json({ message: 'Deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.updateRequestStatus = async (req, res) => {
   try {
     const request = await MaintenanceRequest.findByPk(req.params.id, {

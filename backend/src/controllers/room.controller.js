@@ -1,4 +1,4 @@
-const { Room, RoomType, Floor } = require('../models');
+const { Room, RoomType, Floor, Tenant } = require('../models');
 
 exports.getAllRooms = async (req, res) => {
   try {
@@ -78,7 +78,10 @@ exports.createRoom = async (req, res) => {
     res.status(201).json(newRoom);
   } catch (error) {
     console.error('Create room error:', error);
-    res.status(500).json({ message: 'Server error' });
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({ message: 'รหัสห้องนี้มีอยู่ในระบบแล้ว กรุณาใช้หมายเลขอื่น' });
+    }
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดจากเซิร์ฟเวอร์ กรุณาลองใหม่อีกครั้ง' });
   }
 };
 
@@ -108,6 +111,15 @@ exports.updateRoom = async (req, res) => {
       updateData.room_type_id = rType.id;
     }
     
+    // Handle tenant assignment
+    if (updateData.status === 'occupied' && updateData.tenant_id) {
+      // Unlink the chosen tenant from any old room, and link to this room
+      await Tenant.update({ room_id: room.id, status: 'active' }, { where: { id: updateData.tenant_id } });
+    } else if (updateData.status && updateData.status !== 'occupied') {
+      // Unlink any tenant from this room if it's no longer occupied
+      await Tenant.update({ room_id: null, status: 'inactive' }, { where: { room_id: room.id } });
+    }
+
     await room.update(updateData);
     res.json(room);
   } catch (error) {

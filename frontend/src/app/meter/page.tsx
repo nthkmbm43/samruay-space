@@ -16,7 +16,7 @@ export default function MeterReaderPage() {
 
   const loadRooms = async () => {
     try {
-      const data = await fetchApi('/rooms');
+      const data = await fetchApi('/rooms') as any;
       // Sort by room number
       const sorted = data.sort((a: any, b: any) => a.room_number.localeCompare(b.room_number, undefined, { numeric: true }));
       setRooms(sorted);

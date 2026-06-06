@@ -45,7 +45,7 @@ export default function LiffRegisterPage() {
 
     const loadRooms = async () => {
       try {
-        const rooms = await fetchApi('/rooms?status=available');
+        const rooms = await fetchApi('/rooms?status=available') as any;
         // Sort rooms by room_number
         setAvailableRooms(rooms.sort((a: any, b: any) => a.room_number.localeCompare(b.room_number, undefined, { numeric: true })));
       } catch (err: any) {

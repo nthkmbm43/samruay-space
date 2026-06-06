@@ -43,6 +43,14 @@ const Room = sequelize.define('Room', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true
   },
+  rental_type: {
+    type: DataTypes.ENUM('monthly', 'daily', 'both'),
+    defaultValue: 'both'
+  },
+  price_per_day: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true
+  },
   status: {
     type: DataTypes.STRING(20),
     defaultValue: 'available'

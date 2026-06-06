@@ -35,3 +35,6 @@ frontend/build
 # Misc
 backend/database.sqlite
 frontend/public/uploads
+
+.vercel
+.env*

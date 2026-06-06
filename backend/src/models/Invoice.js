@@ -36,11 +36,27 @@ const Invoice = sequelize.define('Invoice', {
   },
   period_month: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: true
   },
   period_year: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: true
+  },
+  booking_type: {
+    type: DataTypes.ENUM('monthly', 'daily'),
+    defaultValue: 'monthly'
+  },
+  check_in_date: {
+    type: DataTypes.DATEONLY,
+    allowNull: true
+  },
+  check_out_date: {
+    type: DataTypes.DATEONLY,
+    allowNull: true
+  },
+  total_nights: {
+    type: DataTypes.INTEGER,
+    allowNull: true
   },
   issue_date: {
     type: DataTypes.DATEONLY,

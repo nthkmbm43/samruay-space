@@ -3,24 +3,33 @@ const router = express.Router();
 const billingController = require('../controllers/billing.controller');
 const { protect } = require('../middlewares/auth.middleware');
 const { authorize } = require('../middlewares/role.middleware');
+const { checkPropertyStatus } = require('../middlewares/property.middleware');
 
+router.use(protect);
+router.use(checkPropertyStatus);
 router.route('/invoices')
-  .get(protect, billingController.getAllInvoices);
+  .get(billingController.getAllInvoices);
+
+router.route('/invoices/preview')
+  .post(authorize('super_admin', 'admin'), billingController.previewInvoices);
 
 router.route('/invoices/generate')
-  .post(protect, authorize('super_admin', 'admin'), billingController.generateInvoices);
+  .post(authorize('super_admin', 'admin'), billingController.generateInvoices);
 
 router.route('/invoices/:id')
-  .get(protect, billingController.getInvoiceById);
+  .get(billingController.getInvoiceById);
 
 router.route('/meters')
-  .get(protect, billingController.getMeters)
-  .post(protect, authorize('super_admin', 'admin'), billingController.recordMeters);
+  .get(billingController.getMeters)
+  .post(authorize('super_admin', 'admin'), billingController.recordMeters);
+
+router.route('/meters/period')
+  .get(authorize('super_admin', 'admin'), billingController.getMeterReadingsForPeriod);
 
 router.route('/invoices/:id/payments')
-  .post(protect, authorize('super_admin', 'admin'), billingController.recordPayment);
+  .post(authorize('super_admin', 'admin'), billingController.recordPayment);
 
 router.route('/invoices/:id/verify')
-  .put(protect, authorize('super_admin', 'admin'), billingController.verifyInvoice);
+  .put(authorize('super_admin', 'admin'), billingController.verifyInvoice);
 
 module.exports = router;

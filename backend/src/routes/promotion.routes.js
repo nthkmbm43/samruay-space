@@ -27,6 +27,7 @@ router.route('/image/:id')
   .get(promotionController.serveImage);
 
 router.route('/:id')
+  .put(protect, authorize('super_admin', 'admin'), upload.single('image'), promotionController.updatePromotion)
   .delete(protect, authorize('super_admin', 'admin'), promotionController.deletePromotion);
 
 router.route('/:id/broadcast')

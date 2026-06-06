@@ -62,6 +62,10 @@ const MaintenanceRequest = sequelize.define('MaintenanceRequest', {
   tenant_feedback: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  cost: {
+    type: DataTypes.DECIMAL(10, 2),
+    defaultValue: 0
   }
 }, {
   tableName: 'maintenance_requests',

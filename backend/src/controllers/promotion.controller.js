@@ -12,9 +12,42 @@ const client = new line.messagingApi.MessagingApiClient(lineConfig);
 exports.getAllPromotions = async (req, res) => {
   try {
     const promotions = await Promotion.findAll({
-      order: [['created_at', 'DESC']]
+      order: [['start_date', 'ASC']]
     });
-    res.json(promotions);
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const active = [];
+    const upcoming = [];
+    const past = [];
+
+    promotions.forEach(p => {
+      const start = new Date(p.start_date);
+      start.setHours(0, 0, 0, 0);
+      let end = null;
+      if (p.end_date) {
+        end = new Date(p.end_date);
+        end.setHours(23, 59, 59, 999);
+      }
+
+      if (start <= now && (!end || end >= now)) {
+        active.push(p);
+      } else if (start > now) {
+        upcoming.push(p);
+      } else {
+        past.push(p);
+      }
+    });
+
+    // Sort past by end_date DESC
+    past.sort((a, b) => {
+      const endA = a.end_date ? new Date(a.end_date).getTime() : 0;
+      const endB = b.end_date ? new Date(b.end_date).getTime() : 0;
+      return endB - endA;
+    });
+
+    res.json([...active, ...upcoming, ...past]);
   } catch (error) {
     console.error('Error fetching promotions:', error);
     res.status(500).json({ message: 'Server error' });
@@ -50,6 +83,38 @@ exports.createPromotion = async (req, res) => {
     res.status(201).json(promotion);
   } catch (error) {
     console.error('Error creating promotion:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.updatePromotion = async (req, res) => {
+  try {
+    const promotion = await Promotion.findByPk(req.params.id);
+    if (!promotion) {
+      return res.status(404).json({ message: 'Promotion not found' });
+    }
+
+    const { name, description, start_date, end_date, is_active_auto } = req.body;
+    let image_url = promotion.image_url;
+
+    if (req.file) {
+      const fileData = fs.readFileSync(req.file.path);
+      const base64Data = fileData.toString('base64');
+      image_url = `data:${req.file.mimetype};base64,${base64Data}`;
+    }
+
+    await promotion.update({
+      name: name !== undefined ? name : promotion.name,
+      description: description !== undefined ? description : promotion.description,
+      start_date: start_date !== undefined ? start_date : promotion.start_date,
+      end_date: end_date !== undefined ? end_date : promotion.end_date,
+      is_active_auto: is_active_auto !== undefined ? is_active_auto === 'true' || is_active_auto === true : promotion.is_active_auto,
+      image_url
+    });
+
+    res.json(promotion);
+  } catch (error) {
+    console.error('Error updating promotion:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

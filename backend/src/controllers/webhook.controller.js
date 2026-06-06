@@ -2,31 +2,39 @@ const line = require('@line/bot-sdk');
 const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
-const { User, Tenant, Room, Invoice, MaintenanceRequest, Promotion } = require('../models');
+const { User, Tenant, Room, Invoice, MaintenanceRequest, Promotion, Setting, Property } = require('../models');
 const pdfService = require('../services/pdf.service');
+const { AsyncLocalStorage } = require('async_hooks');
 
-const lineConfig = {
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || '',
-};
-const client = new line.messagingApi.MessagingApiClient(lineConfig);
-const blobClient = new line.messagingApi.MessagingApiBlobClient(lineConfig);
+const webhookContext = new AsyncLocalStorage();
 
 // Simple In-Memory State for Chatbot (Ideally use Redis in production)
 const chatState = new Map();
 
 exports.handleLineWebhook = async (req, res) => {
   try {
-    const events = req.body.events;
-    await Promise.all(events.map(async (event) => {
-      const userId = event.source.userId;
-      
-      if (event.type === 'message' && event.message.type === 'text') {
-        await handleIncomingText(userId, event.message.text.trim(), event.replyToken);
-      } else if (event.type === 'message' && event.message.type === 'image') {
-        await handleIncomingImage(userId, event.message.id, event.replyToken);
+    const property = req.property;
+    const client = new line.messagingApi.MessagingApiClient(req.lineConfig);
+    const blobClient = new line.messagingApi.MessagingApiBlobClient(req.lineConfig);
+
+    webhookContext.run({ client, blobClient, property }, async () => {
+      try {
+        const events = req.body.events;
+        await Promise.all(events.map(async (event) => {
+          const userId = event.source.userId;
+          
+          if (event.type === 'message' && event.message.type === 'text') {
+            await handleIncomingText(userId, event.message.text.trim(), event.replyToken);
+          } else if (event.type === 'message' && event.message.type === 'image') {
+            await handleIncomingImage(userId, event.message.id, event.replyToken);
+          }
+        }));
+        res.status(200).send('OK');
+      } catch (err) {
+        console.error('Inner LINE webhook error:', err);
+        res.status(200).send('OK');
       }
-    }));
-    res.status(200).send('OK');
+    });
   } catch (error) {
     console.error('LINE webhook error:', error);
     res.status(200).send('OK');
@@ -35,6 +43,13 @@ exports.handleLineWebhook = async (req, res) => {
 
 async function handleIncomingText(lineUserId, text, replyToken) {
   try {
+    const { client } = webhookContext.getStore();
+    // --- System Maintenance Check ---
+    const maintenanceMode = await Setting.findOne({ where: { key: 'maintenance_mode' } });
+    if (maintenanceMode && maintenanceMode.value === 'true') {
+      return await replyText(replyToken, 'ขออภัยครับ ขณะนี้ระบบกำลังอยู่ในระหว่างการปรับปรุง (Maintenance Mode) กรุณาทำรายการใหม่อีกครั้งในภายหลังครับ 🛠️');
+    }
+
     const isRegisterNew = text === 'ลงทะเบียนใหม่';
     const isRoomInquiry = /จอง|จองห้อง|ห้องว่าง|ห้องไหนว่าง|จองห้องพัก/.test(text);
 
@@ -70,14 +85,21 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           return await replyText(replyToken, 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง กรุณาพิมพ์ใหม่อีกครั้งค่ะ');
         }
 
+        const { property } = webhookContext.getStore();
         const availableRooms = await Room.findAll({
-          where: { status: 'available' },
+          where: { status: 'available', property_id: property.id },
           order: [['room_number', 'ASC']]
         });
 
         let roomListStr = '';
         if (availableRooms.length > 0) {
-          roomListStr = availableRooms.map(r => `ห้อง ${r.room_number}: ราคา ${parseFloat(r.price_override || 1500).toLocaleString()} บาท/เดือน`).join('\n');
+          roomListStr = availableRooms.map(r => {
+            const mPrice = parseFloat(r.price_override || 1500).toLocaleString();
+            const dPrice = parseFloat(r.price_per_day || 500).toLocaleString();
+            if (r.rental_type === 'daily') return `ห้อง ${r.room_number}: ${dPrice} บาท/วัน`;
+            if (r.rental_type === 'both') return `ห้อง ${r.room_number}: ${mPrice} บาท/เดือน หรือ ${dPrice} บาท/วัน`;
+            return `ห้อง ${r.room_number}: ${mPrice} บาท/เดือน`;
+          }).join('\n');
         } else {
           chatState.delete(lineUserId);
           return await replyText(replyToken, 'ขออภัยค่ะ ขณะนี้ไม่มีห้องว่างเลยค่ะ ไม่สามารถจองได้ในขณะนี้');
@@ -105,64 +127,71 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           return await replyText(replyToken, `ขออภัยค่ะ ไม่พบห้อง ${roomNum} หรือห้องนี้ไม่ว่างแล้ว กรุณาเลือกเลขห้องใหม่จากรายการค่ะ`);
         }
 
-        // Execute Booking
-        const { first_name, last_name, phone } = currentState.data;
-        
-        let dbUser = await User.findOne({ where: { phone } });
-        if (!dbUser) {
-          dbUser = await User.create({
-            first_name,
-            last_name,
-            phone,
-            line_user_id: lineUserId,
-            role: 'tenant'
+        if (room.rental_type === 'both') {
+          chatState.set(lineUserId, {
+            step: 'WAITING_RENTAL_TYPE',
+            data: { ...currentState.data, room_id: room.id },
+            timestamp: Date.now()
           });
+          return await replyText(replyToken, `ห้อง ${roomNum} รองรับทั้งการเช่ารายเดือนและรายวันค่ะ\nคุณลูกค้าต้องการเช่าแบบไหนคะ?\n\nพิมพ์ 1 สำหรับ "รายเดือน"\nพิมพ์ 2 สำหรับ "รายวัน"`);
+        } else if (room.rental_type === 'daily') {
+          chatState.set(lineUserId, {
+            step: 'WAITING_CHECK_IN',
+            data: { ...currentState.data, room_id: room.id, rental_type: 'daily' },
+            timestamp: Date.now()
+          });
+          return await replyText(replyToken, `คุณเลือกจองห้อง ${roomNum} แบบรายวันค่ะ\nกรุณาพิมพ์วันที่ต้องการเข้าพัก เช่น วันนี้, พรุ่งนี้ หรือ 15/06/2026 ค่ะ`);
         } else {
-          dbUser.line_user_id = lineUserId;
-          await dbUser.save();
+          return await executeMonthlyBooking(lineUserId, replyToken, currentState.data, room);
         }
+      }
 
-        const newTenant = await Tenant.create({ user_id: dbUser.id, room_id: room.id });
-        room.status = 'reserved';
-        await room.save();
+      if (currentState.step === 'WAITING_RENTAL_TYPE') {
+        const choice = text.trim();
+        const room = await Room.findByPk(currentState.data.room_id);
+        if (choice === '1' || choice === 'รายเดือน') {
+           return await executeMonthlyBooking(lineUserId, replyToken, currentState.data, room);
+        } else if (choice === '2' || choice === 'รายวัน') {
+           chatState.set(lineUserId, {
+             step: 'WAITING_CHECK_IN',
+             data: { ...currentState.data, rental_type: 'daily' },
+             timestamp: Date.now()
+           });
+           return await replyText(replyToken, `คุณเลือกจองห้อง ${room.room_number} แบบรายวันค่ะ\nกรุณาพิมพ์วันที่ต้องการเข้าพัก เช่น วันนี้, พรุ่งนี้ หรือ 15/06/2026 ค่ะ`);
+        } else {
+           return await replyText(replyToken, 'กรุณาพิมพ์ 1 สำหรับรายเดือน หรือ 2 สำหรับรายวันค่ะ');
+        }
+      }
 
-        const deposit = 1000;
-        const advanceRent = parseFloat(room.price_override || 1500);
-        const totalAmount = deposit + advanceRent;
-
-        await Invoice.create({
-          invoice_number: `BK-${Date.now()}`,
-          property_id: room.property_id,
-          room_id: room.id,
-          tenant_id: newTenant.id,
-          period_month: new Date().getMonth() + 1,
-          period_year: new Date().getFullYear(),
-          due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days
-          total: totalAmount,
-          status: 'pending',
-          notes: 'ค่ามัดจำและค่าเช่าล่วงหน้า (จองห้อง)'
-        }).catch(err => console.error("Invoice create error:", err));
-
-        const { Notification } = require('../models');
-        await Notification.create({
-          title: 'จองห้องใหม่',
-          message: `${first_name} ${last_name} จองห้อง ${room.room_number}`,
-          type: 'registration',
-          action_url: '/invoices'
-        });
-
-        chatState.delete(lineUserId);
+      if (currentState.step === 'WAITING_CHECK_IN') {
+        let checkInDate = new Date();
+        const input = text.trim();
+        if (input === 'พรุ่งนี้') {
+          checkInDate.setDate(checkInDate.getDate() + 1);
+        } else if (input !== 'วันนี้') {
+           const parts = input.split('/');
+           if (parts.length === 3) {
+             checkInDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+           } else {
+             return await replyText(replyToken, 'รูปแบบวันที่ไม่ถูกต้องค่ะ กรุณาพิมพ์ วันนี้, พรุ่งนี้ หรือวันที่ในรูปแบบ DD/MM/YYYY (เช่น 15/06/2026)');
+           }
+        }
         
-        const successMsg = `ลงทะเบียน/จองห้องพักสำเร็จค่ะ!\n\nสรุปยอดชำระเงินเพื่อยืนยันการจอง (ค่าประกัน 1,000 บาท + ค่าเช่าล่วงหน้า 1 เดือน) เป็นจำนวนเงิน ${totalAmount.toLocaleString()} บาท ค่ะ\n\n🏦 ช่องทางการชำระเงิน:\nธนาคาร: กรุงไทย\nเลขที่บัญชี: 4373134715\nชื่อบัญชี: ธนกฤต หมู่บ้านม่วง\n\n⚠️ คำแนะนำ:\n\nหลังจากโอนเงินแล้ว รบกวน "ส่งรูปสลิป" กลับมาในแชทนี้ทันที เพื่อให้แอดมินตรวจสอบครับ\n\nหากมียอดโอนไม่ครบถ้วน หรือมีปัญหาในการชำระเงิน รบกวนแจ้ง ชื่อ-เลขห้อง ให้แอดมินทราบด้วยนะครับ\n\nขอบคุณที่ไว้วางใจใช้บริการหอพักแม่สำรวยครับ 🙏`;
-        
-        const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
-        return await client.replyMessage({
-          replyToken: replyToken,
-          messages: [
-            { type: 'text', text: successMsg },
-            { type: 'image', originalContentUrl: `${appUrl}/uploads/qr_code.jpg`, previewImageUrl: `${appUrl}/uploads/qr_code.jpg` }
-          ]
+        chatState.set(lineUserId, {
+          step: 'WAITING_NIGHTS',
+          data: { ...currentState.data, check_in_date: checkInDate },
+          timestamp: Date.now()
         });
+        return await replyText(replyToken, 'พักทั้งหมดกี่คืนคะ? (พิมพ์เป็นตัวเลข เช่น 1, 2, 3)');
+      }
+
+      if (currentState.step === 'WAITING_NIGHTS') {
+         const nights = parseInt(text.trim());
+         if (isNaN(nights) || nights <= 0) {
+           return await replyText(replyToken, 'กรุณาพิมพ์จำนวนคืนเป็นตัวเลขที่ถูกต้องค่ะ (เช่น 1, 2)');
+         }
+         const room = await Room.findByPk(currentState.data.room_id);
+         return await executeDailyBooking(lineUserId, replyToken, { ...currentState.data, nights }, room);
       }
 
       if (currentState.step === 'WAITING_MAINTENANCE_DETAIL') {
@@ -219,8 +248,9 @@ async function handleIncomingText(lineUserId, text, replyToken) {
       if (tenant && tenant.room) {
         return await replyText(replyToken, `ปัจจุบันคุณเข้าพักที่ ห้อง ${tenant.room.room_number} แล้วค่ะ\n\nหากต้องการสอบถามข้อมูลอื่นๆ สามารถเลือกเมนูใน Rich Menu หรือพิมพ์สั่งงานได้เลยนะคะ:\n\nดูบิล: ตรวจสอบยอดชำระเดือนนี้\nแจ้งซ่อม: แจ้งปัญหาต่างๆ\nข่าวสาร: ดูโปรโมชั่นล่าสุด\nแจ้งออก: ทำเรื่องคืนห้องพัก`);
       } else {
+        const { property } = webhookContext.getStore();
         const availableRooms = await Room.findAll({
-          where: { status: 'available' },
+          where: { status: 'available', property_id: property.id },
           order: [['room_number', 'ASC']]
         });
 
@@ -228,7 +258,13 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           return await replyText(replyToken, 'ขออภัยค่ะ ขณะนี้ไม่มีห้องว่างเลยค่ะ');
         }
 
-        const roomListStr = availableRooms.map(r => `ห้อง ${r.room_number}: ราคา ${parseFloat(r.price_override || 1500).toLocaleString()} บาท/เดือน`).join('\n\n');
+        const roomListStr = availableRooms.map(r => {
+          const mPrice = parseFloat(r.price_override || 1500).toLocaleString();
+          const dPrice = parseFloat(r.price_per_day || 500).toLocaleString();
+          if (r.rental_type === 'daily') return `ห้อง ${r.room_number}: ${dPrice} บาท/วัน`;
+          if (r.rental_type === 'both') return `ห้อง ${r.room_number}: ${mPrice} บาท/เดือน หรือ ${dPrice} บาท/วัน`;
+          return `ห้อง ${r.room_number}: ${mPrice} บาท/เดือน`;
+        }).join('\n\n');
         
         return await replyText(replyToken, `ยินดีต้อนรับสู่หอพักแม่สำรวยค่ะ 😊\n\nตอนนี้มีห้องว่างที่พร้อมเข้าอยู่ดังนี้ค่ะ:\n\n${roomListStr}\n\nหากสนใจจองห้องพัก กรุณาพิมพ์คำว่า 'ลงทะเบียนใหม่' เพื่อเริ่มขั้นตอนการจองได้เลยค่ะ`);
       }
@@ -523,28 +559,100 @@ async function handleIncomingText(lineUserId, text, replyToken) {
 
       case 'ข่าวสาร / โปรโมชั่น':
       case 'ข่าวสาร':
-        const promo = await Promotion.findOne({ order: [['created_at', 'DESC']] });
-        if (promo) {
+        const currentDate = new Date().toISOString().split('T')[0];
+        
+        // Find all active promotions based on date and is_active_auto flag
+        const activePromotions = await Promotion.findAll({
+          where: {
+            is_active_auto: true,
+            start_date: { [Op.lte]: currentDate },
+            [Op.or]: [
+              { end_date: { [Op.gte]: currentDate } },
+              { end_date: null }
+            ]
+          },
+          order: [['created_at', 'DESC']]
+        });
+
+        if (activePromotions.length === 0) {
+          return await replyText(replyToken, 'ในเดือนนี้ยังไม่มีโปรโมชั่นพิเศษ รอติดตามข่าวสารดีๆ จากเราได้เร็วๆ นี้นะคะ 💖');
+        }
+
+        const promoAppUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
+
+        if (activePromotions.length === 1) {
+          const promo = activePromotions[0];
           const messages = [];
           if (promo.image_url) {
-            const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
-            const imageUrl = `${appUrl}${promo.image_url}`;
-            messages.push({
-              type: 'image',
-              originalContentUrl: imageUrl,
-              previewImageUrl: imageUrl
-            });
+            const imageUrl = promo.image_url.startsWith('data:') ? null : `${promoAppUrl}${promo.image_url}`;
+            if (imageUrl) {
+              messages.push({
+                type: 'image',
+                originalContentUrl: imageUrl,
+                previewImageUrl: imageUrl
+              });
+            }
           }
           messages.push({
             type: 'text',
             text: `📣 ข่าวสาร/โปรโมชั่นล่าสุด:\n${promo.name}\n${promo.description || ''}`
           });
+          return await client.replyMessage({ replyToken: replyToken, messages });
+        } else {
+          // Multiple promotions -> Flex Message Carousel
+          const bubbles = activePromotions.map(promo => {
+            const imageUrl = promo.image_url && !promo.image_url.startsWith('data:') 
+              ? `${promoAppUrl}${promo.image_url}` 
+              : 'https://samruay-space.vercel.app/logo.png'; // Fallback
+
+            return {
+              type: "bubble",
+              hero: {
+                type: "image",
+                url: imageUrl,
+                size: "full",
+                aspectRatio: "20:13",
+                aspectMode: "cover"
+              },
+              body: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  {
+                    type: "text",
+                    text: promo.name,
+                    weight: "bold",
+                    size: "md",
+                    wrap: true,
+                    color: "#111111"
+                  },
+                  {
+                    type: "text",
+                    text: promo.description || '',
+                    size: "sm",
+                    color: "#aaaaaa",
+                    wrap: true,
+                    margin: "md",
+                    maxLines: 3
+                  }
+                ]
+              }
+            };
+          });
+
           return await client.replyMessage({
             replyToken: replyToken,
-            messages
+            messages: [{
+              type: "flex",
+              altText: "โปรโมชั่นใหม่มาแล้ว! (แตะเพื่อดู)",
+              contents: {
+                type: "carousel",
+                contents: bubbles.slice(0, 10) // LINE allows max 10 bubbles in carousel
+              }
+            }]
           });
         }
-        return await replyText(replyToken, 'ในเดือนนี้ยังไม่มีกิจกรรมหรือโปรโมชั่นพิเศษ กรุณารอติดตามข่าวสารดีๆ จากเราได้เร็วๆ นี้นะคะ 💖');
+        break;
 
       case 'แจ้งออก':
       case 'แจ้งย้ายออก':
@@ -560,6 +668,13 @@ async function handleIncomingText(lineUserId, text, replyToken) {
 
 async function handleIncomingImage(lineUserId, messageId, replyToken) {
   try {
+    const { blobClient } = webhookContext.getStore();
+    // --- System Maintenance Check ---
+    const maintenanceMode = await Setting.findOne({ where: { key: 'maintenance_mode' } });
+    if (maintenanceMode && maintenanceMode.value === 'true') {
+      return await replyText(replyToken, 'ขออภัยครับ ขณะนี้ระบบกำลังอยู่ในระหว่างการปรับปรุง (Maintenance Mode) กรุณาทำรายการใหม่อีกครั้งในภายหลังครับ 🛠️');
+    }
+
     const user = await User.findOne({ where: { line_user_id: lineUserId } });
     if (!user) {
       await replyText(replyToken, '❌ ไม่พบข้อมูลบัญชีผู้ใช้งานของคุณในระบบ');
@@ -698,6 +813,7 @@ async function handleOldRegistrationLinking(lineUserId, text, replyToken) {
 }
 
 async function replyText(replyToken, text) {
+  const { client } = webhookContext.getStore();
   return await client.replyMessage({
     replyToken: replyToken,
     messages: [{ type: 'text', text }]
@@ -709,7 +825,18 @@ exports.sendPushMessage = async (userId, text) => {
   try {
     const user = await User.findByPk(userId);
     if (user && user.line_user_id) {
-      await client.pushMessage({
+      // Find the tenant to get property_id
+      const { Tenant, Room, Property } = require('../models');
+      const line = require('@line/bot-sdk');
+      const tenant = await Tenant.findOne({ where: { user_id: user.id }, include: [{ model: Room, as: 'room' }] });
+      const propertyId = tenant?.room?.property_id || 1;
+      const property = await Property.findByPk(propertyId);
+      
+      const dynamicClient = new line.messagingApi.MessagingApiClient({
+        channelAccessToken: property.line_channel_access_token || process.env.LINE_CHANNEL_ACCESS_TOKEN || ''
+      });
+
+      await dynamicClient.pushMessage({
         to: user.line_user_id,
         messages: [{ type: 'text', text }]
       });
@@ -718,3 +845,87 @@ exports.sendPushMessage = async (userId, text) => {
     console.error('Push Message Failed:', error);
   }
 };
+
+async function executeMonthlyBooking(lineUserId, replyToken, data, room) {
+  const { first_name, last_name, phone } = data;
+  
+  let dbUser = await User.findOne({ where: { phone } });
+  if (!dbUser) {
+    dbUser = await User.create({ first_name, last_name, phone, line_user_id: lineUserId, role: 'tenant' });
+  } else {
+    dbUser.line_user_id = lineUserId; await dbUser.save();
+  }
+
+  const newTenant = await Tenant.create({ user_id: dbUser.id, room_id: room.id });
+  room.status = 'reserved'; await room.save();
+
+  const deposit = 1000;
+  const advanceRent = parseFloat(room.price_override || 1500);
+  const totalAmount = deposit + advanceRent;
+
+  await Invoice.create({
+    invoice_number: `BK-${Date.now()}`,
+    property_id: room.property_id,
+    room_id: room.id,
+    tenant_id: newTenant.id,
+    booking_type: 'monthly',
+    period_month: new Date().getMonth() + 1,
+    period_year: new Date().getFullYear(),
+    due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    total: totalAmount,
+    status: 'pending',
+    notes: 'ค่ามัดจำและค่าเช่าล่วงหน้า (จองห้องแบบรายเดือน)'
+  }).catch(err => console.error("Invoice create error:", err));
+
+  const { Notification } = require('../models');
+  await Notification.create({ title: 'จองห้องใหม่', message: `${first_name} ${last_name} จองห้อง ${room.room_number} (รายเดือน)`, type: 'registration', action_url: '/invoices' });
+
+  chatState.delete(lineUserId);
+  const successMsg = `ลงทะเบียน/จองห้องพักสำเร็จค่ะ!\n\nสรุปยอดชำระเงินเพื่อยืนยันการจอง (ค่าประกัน 1,000 บาท + ค่าเช่าล่วงหน้า 1 เดือน) เป็นจำนวนเงิน ${totalAmount.toLocaleString()} บาท ค่ะ\n\n🏦 ช่องทางการชำระเงิน:\nธนาคาร: กรุงไทย\nเลขที่บัญชี: 4373134715\nชื่อบัญชี: ธนกฤต หมู่บ้านม่วง\n\n⚠️ คำแนะนำ:\nหลังจากโอนเงินแล้ว รบกวน "ส่งรูปสลิป" กลับมาในแชทนี้ทันที เพื่อให้แอดมินตรวจสอบครับ\n\nหากมียอดโอนไม่ครบถ้วน หรือมีปัญหาในการชำระเงิน รบกวนแจ้ง ชื่อ-เลขห้อง ให้แอดมินทราบด้วยนะครับ\n\nขอบคุณที่ไว้วางใจใช้บริการหอพักแม่สำรวยครับ 🙏`;
+  const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
+  return await client.replyMessage({ replyToken, messages: [ { type: 'text', text: successMsg }, { type: 'image', originalContentUrl: `${appUrl}/uploads/qr_code.jpg`, previewImageUrl: `${appUrl}/uploads/qr_code.jpg` } ] });
+}
+
+async function executeDailyBooking(lineUserId, replyToken, data, room) {
+  const { first_name, last_name, phone, check_in_date, nights } = data;
+  
+  let dbUser = await User.findOne({ where: { phone } });
+  if (!dbUser) {
+    dbUser = await User.create({ first_name, last_name, phone, line_user_id: lineUserId, role: 'tenant' });
+  } else {
+    dbUser.line_user_id = lineUserId; await dbUser.save();
+  }
+
+  const newTenant = await Tenant.create({ user_id: dbUser.id, room_id: room.id });
+  room.status = 'reserved'; await room.save();
+
+  const pricePerDay = parseFloat(room.price_per_day || 500);
+  const totalAmount = pricePerDay * nights;
+
+  const checkInObj = new Date(check_in_date);
+  const checkOutObj = new Date(check_in_date);
+  checkOutObj.setDate(checkOutObj.getDate() + nights);
+
+  await Invoice.create({
+    invoice_number: `BKD-${Date.now()}`,
+    property_id: room.property_id,
+    room_id: room.id,
+    tenant_id: newTenant.id,
+    booking_type: 'daily',
+    check_in_date: checkInObj,
+    check_out_date: checkOutObj,
+    total_nights: nights,
+    due_date: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000), // Due in 1 day
+    total: totalAmount,
+    status: 'pending',
+    notes: `ค่าเช่าห้องพักรายวัน (${nights} คืน)`
+  }).catch(err => console.error("Invoice create error:", err));
+
+  const { Notification } = require('../models');
+  await Notification.create({ title: 'จองห้องใหม่ (รายวัน)', message: `${first_name} ${last_name} จองห้อง ${room.room_number} (${nights} คืน)`, type: 'registration', action_url: '/invoices' });
+
+  chatState.delete(lineUserId);
+  const successMsg = `จองห้องพักรายวันสำเร็จค่ะ!\n\nห้อง: ${room.room_number}\nวันที่เข้าพัก: ${checkInObj.toLocaleDateString('th-TH')}\nจำนวนคืน: ${nights} คืน\n\nยอดโอนชำระเพื่อยืนยันสิทธิ์: ${totalAmount.toLocaleString()} บาท\n\n🏦 ช่องทางการชำระเงิน:\nธนาคาร: กรุงไทย\nเลขที่บัญชี: 4373134715\nชื่อบัญชี: ธนกฤต หมู่บ้านม่วง\n\n⚠️ คำแนะนำ:\nหลังจากโอนเงินแล้ว รบกวน "ส่งรูปสลิป" กลับมาในแชทนี้ทันที เพื่อให้แอดมินตรวจสอบครับ ขอบคุณค่ะ 🙏`;
+  const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
+  return await client.replyMessage({ replyToken, messages: [ { type: 'text', text: successMsg }, { type: 'image', originalContentUrl: `${appUrl}/uploads/qr_code.jpg`, previewImageUrl: `${appUrl}/uploads/qr_code.jpg` } ] });
+}

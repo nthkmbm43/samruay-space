@@ -34,6 +34,8 @@ const maintenanceRoutes = require('./src/routes/maintenance.routes');
 const settingRoutes = require('./src/routes/setting.routes');
 const notificationRoutes = require('./src/routes/notification.routes');
 const promotionRoutes = require('./src/routes/promotion.routes');
+const reportRoutes = require('./src/routes/report.routes');
+const adminRoutes = require('./src/routes/admin.routes');
 
 // Basic Route
 app.get('/', (req, res) => {
@@ -89,6 +91,8 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/promotions', promotionRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Sync Database and Start Server
 const PORT = process.env.PORT || 3001;
