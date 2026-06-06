@@ -294,7 +294,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         if (!latestBill) return await replyText(replyToken, 'คุณยังไม่มีบิลค่าเช่ารายเดือนในระบบค่ะ');
 
         const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
-        const promptPayNumber = process.env.PROMPTPAY_NUMBER || '0949099502';
+        const promptPayNumber = process.env.PROMPTPAY_NUMBER || 'your-promptpay-number';
         const qrUrl = `https://promptpay.io/${promptPayNumber}/${latestBill.total}.png`;
 
         const invoiceFlex = {
@@ -439,7 +439,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         
         if (!billForQr) return await replyText(replyToken, 'คุณไม่มีบิลที่รอการชำระเงินค่ะ');
         
-        const ppNumber = process.env.PROMPTPAY_NUMBER || '0949099502';
+        const ppNumber = process.env.PROMPTPAY_NUMBER || 'your-promptpay-number';
         const generatedQrUrl = `https://promptpay.io/${ppNumber}/${billForQr.total}.png`;
         
         return await client.replyMessage({

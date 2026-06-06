@@ -2,8 +2,8 @@ const axios = require('axios');
 
 class LineService {
   constructor() {
-    this.channelId = process.env.LINE_CHANNEL_ID || '2010301594';
-    this.channelSecret = process.env.LINE_CHANNEL_SECRET || '5e33887a044dfaadef4e0ee2bbe35244';
+    this.channelId = process.env.LINE_CHANNEL_ID || 'your-line-channel-id';
+    this.channelSecret = process.env.LINE_CHANNEL_SECRET || 'your-line-channel-secret';
     this.channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
   }
 

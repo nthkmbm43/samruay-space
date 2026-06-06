@@ -18,7 +18,7 @@ export default function SettingsPage() {
   const [waterRate, setWaterRate] = useState('');
   
   // Display only, typically loaded from env
-  const channelId = process.env.NEXT_PUBLIC_LINE_CHANNEL_ID || '2010301594';
+  const channelId = process.env.NEXT_PUBLIC_LINE_CHANNEL_ID || 'your-line-channel-id';
 
   const loadData = async () => {
     setLoading(true);
