@@ -656,9 +656,16 @@ async function handleIncomingText(lineUserId, text, replyToken) {
 
       case 'แจ้งออก':
       case 'แจ้งย้ายออก':
+      case 'แจ้งย้าย':
+      case 'ย้ายออก':
+      case 'แจ้งย้ายห้อง':
         return await replyText(replyToken, '📝 ได้รับเรื่องแจ้งย้ายออกแล้วค่ะ แอดมินจะเข้าไปตรวจสอบความเรียบร้อยของห้อง และจะส่ง [บิลสรุปยอดสุทธิพร้อมเงินประกันคืน] กลับมาให้ในแชทนี้นะคะ');
 
       default:
+        // Try substring match as a fallback for flexibility
+        if (text.includes('แจ้งออก') || text.includes('ย้ายออก') || text.includes('แจ้งย้าย')) {
+          return await replyText(replyToken, '📝 ได้รับเรื่องแจ้งย้ายออกแล้วค่ะ แอดมินจะเข้าไปตรวจสอบความเรียบร้อยของห้อง และจะส่ง [บิลสรุปยอดสุทธิพร้อมเงินประกันคืน] กลับมาให้ในแชทนี้นะคะ');
+        }
         return await replyText(replyToken, `ขออภัยค่ะ พอดีฉันไม่ค่อยเข้าใจคำสั่งนี้ ลองเลือกจากเมนูด้านล่าง หรือส่งรูปสลิปเพื่อชำระเงินได้เลยนะคะ`);
     }
   } catch (error) {
