@@ -7,10 +7,22 @@ const { Property } = require('../models');
 
 // Custom middleware to verify signature and parse body dynamically
 const dynamicLineMiddleware = async (req, res, next) => {
-  const propertyId = req.params.property_id;
+  // Support both /line/:property_id and /line (default to first property)
+  let propertyId = req.params.property_id;
   try {
-    const property = await Property.findByPk(propertyId);
+    let property;
+    if (propertyId) {
+      property = await Property.findByPk(propertyId);
+    } else {
+      // Fallback: find first active property with LINE configured, or just the first property
+      property = await Property.findOne({
+        where: { is_active: true },
+        order: [['id', 'ASC']]
+      });
+    }
+
     if (!property) {
+      console.error('[Webhook] No property found');
       return res.status(404).send('Property not found');
     }
 
@@ -19,7 +31,7 @@ const dynamicLineMiddleware = async (req, res, next) => {
     const channelAccessToken = property.line_channel_access_token || process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
 
     if (!channelSecret) {
-      console.error(`[Webhook] No LINE Channel Secret for property ${propertyId} and none in .env`);
+      console.error(`[Webhook] No LINE Channel Secret for property ${property.id} and none in .env`);
       return res.status(400).send('LINE not configured: missing channel secret');
     }
     
@@ -40,7 +52,8 @@ const dynamicLineMiddleware = async (req, res, next) => {
   }
 };
 
-// LINE webhook endpoint
+// LINE webhook endpoints — both with and without property_id
 router.post('/line/:property_id', dynamicLineMiddleware, webhookController.handleLineWebhook);
+router.post('/line', dynamicLineMiddleware, webhookController.handleLineWebhook);
 
 module.exports = router;
