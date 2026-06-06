@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Loader2, Zap, Droplets, Save, MessageCircle, ShieldCheck, WifiOff } from 'lucide-react';
+import { Loader2, Zap, Droplets, Save, MessageCircle, ShieldCheck, WifiOff, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'react-hot-toast';
@@ -13,25 +13,52 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingLine, setSavingLine] = useState(false);
   
   const [elecRate, setElecRate] = useState('');
   const [waterRate, setWaterRate] = useState('');
   
-  // Display only, typically loaded from env
-  const channelId = process.env.NEXT_PUBLIC_LINE_CHANNEL_ID || 'your-line-channel-id';
+  // LINE credentials (editable, loaded from property)
+  const [lineToken, setLineToken] = useState('');
+  const [lineSecret, setLineSecret] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+  const [propertyId, setPropertyId] = useState<number | null>(null);
+  const [lineConfigured, setLineConfigured] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
     setOffline(false);
     try {
+      // Load settings (rates)
       const data = await fetchApi<any>('/settings');
       if (data?.elec_rate) setElecRate(data.elec_rate);
       if (data?.water_rate) setWaterRate(data.water_rate);
+
+      // Load current property to get LINE credentials
+      const properties = await fetchApi<any[]>('/properties');
+      if (Array.isArray(properties) && properties.length > 0) {
+        // Use selected property or first one
+        let selectedProp = properties[0];
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem('selected_property') || localStorage.getItem('impersonated_property');
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              const found = properties.find((p: any) => p.id === parsed.id);
+              if (found) selectedProp = found;
+            } catch {}
+          }
+        }
+        setPropertyId(selectedProp.id);
+        setLineToken(selectedProp.line_channel_access_token || '');
+        setLineSecret(selectedProp.line_channel_secret || '');
+        setLineConfigured(!!(selectedProp.line_channel_access_token && selectedProp.line_channel_secret));
+      }
     } catch (err: any) {
       if (err.message?.includes('เชื่อมต่อเซิร์ฟเวอร์')) {
         setOffline(true);
       }
-      // Silently fail
     } finally {
       setLoading(false);
     }
@@ -53,6 +80,30 @@ export default function SettingsPage() {
       toast.error(err.message || 'บันทึกไม่สำเร็จ');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveLine = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!propertyId) {
+      toast.error('ไม่พบข้อมูลหอพัก กรุณารีเฟรชหน้า');
+      return;
+    }
+    setSavingLine(true);
+    try {
+      await fetchApi(`/properties/${propertyId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          line_channel_access_token: lineToken,
+          line_channel_secret: lineSecret
+        })
+      });
+      toast.success('บันทึกการตั้งค่า LINE สำเร็จ ✓');
+      setLineConfigured(!!(lineToken && lineSecret));
+    } catch (err: any) {
+      toast.error(err.message || 'บันทึกไม่สำเร็จ');
+    } finally {
+      setSavingLine(false);
     }
   };
 
@@ -139,7 +190,7 @@ export default function SettingsPage() {
           </form>
         </div>
 
-        {/* ── Integrations ── */}
+        {/* ── LINE Integration (Editable) ── */}
         <div className="glass-card rounded-2xl p-6 flex flex-col">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-[#00B900]/10 flex items-center justify-center">
@@ -151,29 +202,72 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="space-y-5 flex-1">
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">{t('channelId')}</label>
-              <input 
-                value={channelId} readOnly 
-                className="w-full border border-dashed border-border rounded-xl px-4 py-2.5 bg-muted/30 text-sm text-muted-foreground font-mono"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">{t('channelSecret')}</label>
-              <input 
-                type="password" value="********************************" readOnly 
-                className="w-full border border-dashed border-border rounded-xl px-4 py-2.5 bg-muted/30 text-sm text-muted-foreground font-mono"
-              />
-            </div>
-          </div>
+          <form onSubmit={handleSaveLine} className="space-y-5 flex-1 flex flex-col">
+            {loading ? (
+              <div className="space-y-4">
+                <div className="shimmer h-12 w-full rounded-xl" />
+                <div className="shimmer h-12 w-full rounded-xl" />
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Channel Access Token</label>
+                  <div className="relative">
+                    <input 
+                      type={showToken ? 'text' : 'password'}
+                      value={lineToken}
+                      onChange={e => setLineToken(e.target.value)}
+                      className="w-full border rounded-xl px-4 py-2.5 pr-10 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#00B900]/40"
+                      placeholder="วาง Channel Access Token ที่นี่"
+                      disabled={offline}
+                    />
+                    <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">{t('channelSecret')}</label>
+                  <div className="relative">
+                    <input 
+                      type={showSecret ? 'text' : 'password'}
+                      value={lineSecret}
+                      onChange={e => setLineSecret(e.target.value)}
+                      className="w-full border rounded-xl px-4 py-2.5 pr-10 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#00B900]/40"
+                      placeholder="วาง Channel Secret ที่นี่"
+                      disabled={offline}
+                    />
+                    <button type="button" onClick={() => setShowSecret(!showSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  ดึงค่าเหล่านี้จาก <a href="https://developers.line.biz/console/" target="_blank" rel="noopener noreferrer" className="text-[#00B900] underline hover:no-underline">LINE Developers Console</a> → Messaging API
+                </p>
+                <div className="pt-2 mt-auto">
+                  <Button type="submit" disabled={savingLine || offline} className="w-full bg-[#00B900] hover:bg-[#009900] text-white gap-2 rounded-xl py-6">
+                    {savingLine ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    บันทึกการตั้งค่า LINE
+                  </Button>
+                </div>
+              </>
+            )}
+          </form>
 
-          <div className="mt-6 pt-5 border-t flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-medium text-emerald-600 dark:text-emerald-400">{t('lineConnected')}</span>
-            </div>
-            <ShieldCheck className="w-5 h-5 text-emerald-500 opacity-50" />
+          <div className="mt-5 pt-4 border-t flex items-center justify-between">
+            {lineConfigured ? (
+              <div className="flex items-center gap-2 text-sm">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-medium text-emerald-600 dark:text-emerald-400">{t('lineConnected')}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <span className="font-medium text-amber-600 dark:text-amber-400">ยังไม่ได้ตั้งค่า — Bot จะยังไม่ทำงาน</span>
+              </div>
+            )}
+            <ShieldCheck className={cn("w-5 h-5 opacity-50", lineConfigured ? "text-emerald-500" : "text-muted-foreground")} />
           </div>
         </div>
       </div>
