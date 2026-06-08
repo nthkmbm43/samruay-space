@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Loader2, Zap, Droplets, Save, MessageCircle, ShieldCheck, WifiOff, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Loader2, Zap, Droplets, Save, MessageCircle, ShieldCheck, WifiOff, Eye, EyeOff, AlertTriangle, Sparkles } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'react-hot-toast';
@@ -25,6 +25,10 @@ export default function SettingsPage() {
   const [showSecret, setShowSecret] = useState(false);
   const [propertyId, setPropertyId] = useState<number | null>(null);
   const [lineConfigured, setLineConfigured] = useState(false);
+  
+  // AI Knowledge Base
+  const [aiKnowledge, setAiKnowledge] = useState('');
+  const [savingAi, setSavingAi] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -54,6 +58,7 @@ export default function SettingsPage() {
         setLineToken(selectedProp.line_channel_access_token || '');
         setLineSecret(selectedProp.line_channel_secret || '');
         setLineConfigured(!!(selectedProp.line_channel_access_token && selectedProp.line_channel_secret));
+        setAiKnowledge(selectedProp.ai_knowledge_base || '');
       }
     } catch (err: any) {
       if (err.message?.includes('เชื่อมต่อเซิร์ฟเวอร์')) {
@@ -104,6 +109,26 @@ export default function SettingsPage() {
       toast.error(err.message || 'บันทึกไม่สำเร็จ');
     } finally {
       setSavingLine(false);
+    }
+  };
+
+  const handleSaveAi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!propertyId) {
+      toast.error('ไม่พบข้อมูลหอพัก กรุณารีเฟรชหน้า');
+      return;
+    }
+    setSavingAi(true);
+    try {
+      await fetchApi(`/properties/${propertyId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ai_knowledge_base: aiKnowledge })
+      });
+      toast.success('บันทึกความรู้ให้ AI สำเร็จ ✓');
+    } catch (err: any) {
+      toast.error(err.message || 'บันทึกไม่สำเร็จ');
+    } finally {
+      setSavingAi(false);
     }
   };
 
@@ -271,6 +296,40 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* ── AI Knowledge Base ── */}
+      <div className="glass-card rounded-2xl p-6 mt-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-violet-500" />
+          </div>
+          <div>
+            <h2 className="font-bold text-lg">ความรู้ของ AI (AI Knowledge Base)</h2>
+            <p className="text-sm text-muted-foreground">พิมพ์ข้อมูลหอพัก เช่น กฎระเบียบ รหัส Wi-Fi เพื่อให้ AI ช่วยตอบผู้เช่าอัตโนมัติ</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveAi} className="space-y-4">
+          {loading ? (
+            <div className="shimmer h-40 w-full rounded-xl" />
+          ) : (
+            <textarea
+              value={aiKnowledge}
+              onChange={e => setAiKnowledge(e.target.value)}
+              placeholder="ตัวอย่าง: ค่าไฟ 6 บาท, ค่าน้ำ 20 บาท, รหัส Wi-Fi ส่วนกลางคือ 12345678, ห้ามเลี้ยงสัตว์ทุกชนิด, ถ้าแอร์เสียให้แจ้งซ่อมผ่านเมนูแจ้งซ่อม..."
+              className="w-full h-40 border rounded-xl p-4 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/40 resize-y"
+              disabled={offline}
+            />
+          )}
+          <div className="flex justify-end pt-2">
+            <Button type="submit" disabled={savingAi || offline || loading} className="bg-violet-600 hover:bg-violet-700 text-white gap-2 rounded-xl py-6 px-6">
+              {savingAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              บันทึกความรู้ให้ AI
+            </Button>
+          </div>
+        </form>
+      </div>
+
     </div>
   );
 }

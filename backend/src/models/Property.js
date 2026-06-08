@@ -66,6 +66,10 @@ const Property = sequelize.define('Property', {
   line_channel_secret: {
     type: DataTypes.STRING(100),
     allowNull: true
+  },
+  ai_knowledge_base: {
+    type: DataTypes.TEXT,
+    allowNull: true
   }
 }, {
   tableName: 'properties',

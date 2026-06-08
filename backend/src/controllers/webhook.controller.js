@@ -5,6 +5,7 @@ const { Op } = require('sequelize');
 const { User, Tenant, Room, Invoice, MaintenanceRequest, Promotion, Setting, Property } = require('../models');
 const pdfService = require('../services/pdf.service');
 const { AsyncLocalStorage } = require('async_hooks');
+const { GoogleGenAI } = require('@google/genai');
 
 const webhookContext = new AsyncLocalStorage();
 
@@ -27,6 +28,8 @@ exports.handleLineWebhook = async (req, res) => {
             await handleIncomingText(userId, event.message.text.trim(), event.replyToken);
           } else if (event.type === 'message' && event.message.type === 'image') {
             await handleIncomingImage(userId, event.message.id, event.replyToken);
+          } else if (event.type === 'postback') {
+            await handlePostback(userId, event.postback.data, event.replyToken);
           }
         }));
         res.status(200).send('OK');
@@ -660,14 +663,130 @@ async function handleIncomingText(lineUserId, text, replyToken) {
       case 'ย้ายออก':
       case 'แจ้งย้ายห้อง':
       case 'แจ้งเข้า-ออก':
-        return await replyText(replyToken, '📝 ได้รับเรื่องแจ้งย้ายออกแล้วค่ะ แอดมินจะเข้าไปตรวจสอบความเรียบร้อยของห้อง และจะส่ง [บิลสรุปยอดสุทธิพร้อมเงินประกันคืน] กลับมาให้ในแชทนี้นะคะ');
+      case 'แจ้งเข้า ออก':
+        return await client.replyMessage({
+          replyToken: replyToken,
+          messages: [{
+            type: "flex",
+            altText: "แบบฟอร์มแจ้งย้ายออก",
+            contents: {
+              type: "bubble",
+              header: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  {
+                    type: "text",
+                    text: "แจ้งย้ายออก 📦",
+                    weight: "bold",
+                    color: "#ffffff",
+                    size: "xl"
+                  }
+                ],
+                backgroundColor: "#e11d48",
+                paddingAll: "20px"
+              },
+              body: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  {
+                    type: "text",
+                    text: "นโยบายการแจ้งย้ายออก",
+                    weight: "bold",
+                    size: "md",
+                    color: "#111827",
+                    margin: "md"
+                  },
+                  {
+                    type: "text",
+                    text: "1. ผู้เช่าต้องแจ้งย้ายออกล่วงหน้าอย่างน้อย 30 วัน",
+                    size: "sm",
+                    color: "#4b5563",
+                    wrap: true,
+                    margin: "sm"
+                  },
+                  {
+                    type: "text",
+                    text: "2. แอดมินจะทำการตรวจสอบสภาพห้องและคำนวณหักลบค่าเสียหายจากเงินประกัน",
+                    size: "sm",
+                    color: "#4b5563",
+                    wrap: true,
+                    margin: "sm"
+                  },
+                  {
+                    type: "text",
+                    text: "3. ระบบจะส่งบิลสรุปยอดสุทธิกลับมาในแชทนี้",
+                    size: "sm",
+                    color: "#4b5563",
+                    wrap: true,
+                    margin: "sm"
+                  }
+                ]
+              },
+              footer: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  {
+                    type: "button",
+                    action: {
+                      type: "postback",
+                      label: "ยืนยันการแจ้งย้ายออก",
+                      data: "action=confirm_moveout",
+                      displayText: "ฉันต้องการยืนยันการแจ้งย้ายออก"
+                    },
+                    style: "primary",
+                    color: "#e11d48"
+                  }
+                ],
+                paddingAll: "20px"
+              }
+            }
+          }]
+        });
+
+      case 'ฉันต้องการยืนยันการแจ้งย้ายออก':
+        // Fallback in case postback triggers text as well, or user types it directly
+        return await handleMoveOutConfirmation(lineUserId, replyToken);
 
       default:
-        // Try substring match as a fallback for flexibility
-        if (text.includes('แจ้งออก') || text.includes('ย้ายออก') || text.includes('แจ้งย้าย') || text.includes('แจ้งเข้า-ออก') || text.includes('เข้า-ออก')) {
-          return await replyText(replyToken, '📝 ได้รับเรื่องแจ้งย้ายออกแล้วค่ะ แอดมินจะเข้าไปตรวจสอบความเรียบร้อยของห้อง และจะส่ง [บิลสรุปยอดสุทธิพร้อมเงินประกันคืน] กลับมาให้ในแชทนี้นะคะ');
+        // Attempt to answer with AI if GEMINI_API_KEY is available
+        if (process.env.GEMINI_API_KEY) {
+          const { property } = webhookContext.getStore();
+          
+          try {
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            
+            const systemPrompt = `คุณคือผู้ช่วย AI ประจำหอพัก "${property.name}" 
+ข้อมูลหอพักที่คุณรู้: ${property.ai_knowledge_base || 'ไม่มีข้อมูลเพิ่มเติม'}
+
+ข้อกำหนดการตอบ:
+1. ตอบสั้นๆ กระชับ สุภาพ เป็นกันเอง มีหางเสียง (ครับ/ค่ะ)
+2. ถ้าคำถามถามถึงข้อมูลที่มีในความรู้หอพัก ให้ตอบไปตามนั้น
+3. ถ้าไม่รู้คำตอบ, ไม่แน่ใจ, หรือผู้เช่ามีเรื่องร้องเรียน/แจ้งซ่อม/อยากคุยกับคน ให้ตอบเป๊ะๆ ด้วยประโยคนี้เท่านั้น: "กรุณารอสักครู่นะคะ เดี๋ยวแอดมินมาตอบแชทเองค่ะ"
+4. ห้ามบอกเด็ดขาดว่าคุณคือ AI ให้ทำตัวเป็นผู้ช่วยหอพัก`;
+
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: [
+                { role: 'user', parts: [{ text: systemPrompt }] },
+                { role: 'model', parts: [{ text: 'รับทราบค่ะ ฉันจะทำตามเงื่อนไขอย่างเคร่งครัด' }] },
+                { role: 'user', parts: [{ text }] }
+              ]
+            });
+            
+            const aiReply = response.text?.trim() || "กรุณารอสักครู่นะคะ เดี๋ยวแอดมินมาตอบแชทเองค่ะ";
+            return await replyText(replyToken, aiReply);
+            
+          } catch (aiError) {
+            console.error('AI generation error:', aiError);
+            return await replyText(replyToken, "กรุณารอสักครู่นะคะ เดี๋ยวแอดมินมาตอบแชทเองค่ะ");
+          }
+        } else {
+          // No AI key, use classic fallback
+          return await replyText(replyToken, "กรุณารอสักครู่นะคะ เดี๋ยวแอดมินมาตอบแชทเองค่ะ");
         }
-        return await replyText(replyToken, `ขออภัยค่ะ พอดีฉันไม่ค่อยเข้าใจคำสั่งนี้ ลองเลือกจากเมนูด้านล่าง หรือส่งรูปสลิปเพื่อชำระเงินได้เลยนะคะ`);
     }
   } catch (error) {
     console.error('Error handling text:', error);
@@ -939,3 +1058,32 @@ async function executeDailyBooking(lineUserId, replyToken, data, room) {
   const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
   return await client.replyMessage({ replyToken, messages: [ { type: 'text', text: successMsg }, { type: 'image', originalContentUrl: `${appUrl}/uploads/qr_code.jpg`, previewImageUrl: `${appUrl}/uploads/qr_code.jpg` } ] });
 }
+
+async function handleMoveOutConfirmation(lineUserId, replyToken) {
+  const user = await User.findOne({ where: { line_user_id: lineUserId } });
+  if (!user) {
+    return await replyText(replyToken, '❌ ไม่พบข้อมูลบัญชีผู้ใช้งานของคุณในระบบ');
+  }
+
+  const tenant = await Tenant.findOne({ where: { user_id: user.id }, order: [['created_at', 'DESC']], include: [{ model: Room, as: 'room' }] });
+  if (!tenant) {
+    return await replyText(replyToken, '❌ ไม่พบข้อมูลการเช่าห้องของคุณในระบบ');
+  }
+
+  const { Notification } = require('../models');
+  await Notification.create({
+    title: 'แจ้งย้ายออก',
+    message: `ผู้เช่าห้อง ${tenant?.room?.room_number || 'ไม่ทราบ'} ยืนยันแจ้งย้ายออกผ่านระบบ`,
+    type: 'tenant',
+    action_url: '/tenants'
+  });
+
+  return await replyText(replyToken, `📝 ยืนยันการแจ้งย้ายออกเรียบร้อยค่ะ สำหรับห้อง ${tenant?.room?.room_number || ''}\nแอดมินจะเข้าไปตรวจสอบความเรียบร้อยของห้อง และจะส่ง [บิลสรุปยอดสุทธิพร้อมหักเงินประกัน] กลับมาให้ในแชทนี้นะคะ`);
+}
+
+async function handlePostback(lineUserId, data, replyToken) {
+  if (data === 'action=confirm_moveout') {
+    return await handleMoveOutConfirmation(lineUserId, replyToken);
+  }
+}
+
