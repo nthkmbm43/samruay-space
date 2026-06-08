@@ -306,12 +306,12 @@ export default function MoveOutPage() {
       )}
 
       {/* ── Context Navigation Back Button ── */}
-      <div className="mb-2">
+      <div className="mb-6">
         <button
           onClick={() => router.push('/dashboard')}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors group"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors group cursor-pointer"
         >
-          <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+          <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-1" />
           <span>กลับไปหน้าแดชบอร์ด</span>
         </button>
       </div>
@@ -390,7 +390,7 @@ export default function MoveOutPage() {
                 setCurrentPage(1);
               }}
               onFocus={() => setShowSuggestions(true)}
-              className="w-full border rounded-xl px-3.5 py-2 bg-background text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 text-foreground border-border"
+              className="w-full border rounded-xl px-3.5 py-2 bg-background dark:bg-zinc-900 text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 text-foreground dark:text-zinc-100 border-border dark:border-zinc-800 placeholder-muted-foreground dark:placeholder-zinc-500 transition-all"
             />
             {showSuggestions && suggestions.length > 0 && (
               <>
@@ -398,7 +398,7 @@ export default function MoveOutPage() {
                   className="fixed inset-0 z-10"
                   onClick={() => setShowSuggestions(false)}
                 />
-                <div className="absolute left-0 right-0 mt-1.5 max-h-56 overflow-y-auto rounded-xl border border-border bg-card shadow-2xl z-20 py-1.5 scrollbar-thin">
+                <div className="absolute left-0 right-0 mt-1.5 max-h-56 overflow-y-auto rounded-xl border border-border dark:border-zinc-800 bg-card dark:bg-zinc-900 shadow-2xl z-20 py-1.5 scrollbar-thin">
                   {suggestions.map((sug, idx) => (
                     <button
                       key={idx}
@@ -406,7 +406,7 @@ export default function MoveOutPage() {
                         setSearchQuery(sug.value);
                         setShowSuggestions(false);
                       }}
-                      className="w-full text-left px-4 py-2 text-xs text-foreground hover:bg-muted transition-colors font-medium"
+                      className="w-full text-left px-4 py-2.5 text-xs text-foreground dark:text-zinc-300 hover:bg-muted dark:hover:bg-zinc-800 hover:text-primary dark:hover:text-white transition-colors font-medium cursor-pointer"
                     >
                       {sug.label}
                     </button>
@@ -556,43 +556,37 @@ export default function MoveOutPage() {
                 แสดง {Math.min(filteredRequests.length, (currentPage - 1) * pageSize + 1)} ถึง {Math.min(filteredRequests.length, currentPage * pageSize)} จากทั้งหมด {filteredRequests.length} รายการ
               </div>
               <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
+                <button
                   disabled={currentPage === 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="h-8 w-8 p-0 rounded-lg hover:bg-muted"
+                  className="h-8 w-8 rounded-lg border border-border bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center justify-center"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                </Button>
+                </button>
                 {Array.from({ length: totalPages }).map((_, idx) => {
                   const pageNum = idx + 1;
                   return (
-                    <Button
+                    <button
                       key={pageNum}
-                      variant={currentPage === pageNum ? 'default' : 'outline'}
-                      size="sm"
                       onClick={() => setCurrentPage(pageNum)}
                       className={cn(
-                        'h-8 w-8 p-0 rounded-lg text-xs font-bold transition-all',
+                        'h-8 w-8 text-xs font-semibold rounded-lg border transition-all cursor-pointer flex items-center justify-center',
                         currentPage === pageNum
-                          ? 'gradient-btn text-white border-0 shadow-sm'
-                          : 'hover:bg-muted'
+                          ? 'bg-primary text-white border-primary shadow-sm font-bold'
+                          : 'bg-transparent border-border text-muted-foreground hover:text-foreground hover:bg-muted/50'
                       )}
                     >
                       {pageNum}
-                    </Button>
+                    </button>
                   );
                 })}
-                <Button
-                  variant="outline"
-                  size="sm"
+                <button
                   disabled={currentPage === totalPages}
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  className="h-8 w-8 p-0 rounded-lg hover:bg-muted"
+                  className="h-8 w-8 rounded-lg border border-border bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center justify-center"
                 >
                   <ChevronRight className="w-4 h-4" />
-                </Button>
+                </button>
               </div>
             </div>
           )}
