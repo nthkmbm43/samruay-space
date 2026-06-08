@@ -39,6 +39,7 @@ export function Sidebar() {
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [propertyOpen, setPropertyOpen] = useState(false);
   const [pendingMaint, setPendingMaint] = useState(0);
+  const [pendingMoveOut, setPendingMoveOut] = useState(0);
   const [user, setUser] = useState<{ name?: string; email?: string; role?: string } | null>(null);
 
   const navItems: NavItem[] = [
@@ -49,6 +50,7 @@ export function Sidebar() {
     { name: t('tenants'), href: '/tenants', icon: Users },
     { name: t('billing'), href: '/billing', icon: Receipt },
     { name: t('maintenance'), href: '/maintenance', icon: Wrench, badge: pendingMaint || undefined },
+    { name: t('moveout'), href: '/moveout', icon: LogOut, badge: pendingMoveOut || undefined },
     { name: 'รายงาน', href: '/reports', icon: BarChart3 },
     { name: t('settings'), href: '/settings', icon: Settings },
   ];
@@ -71,6 +73,13 @@ export function Sidebar() {
     fetchApi<any[]>('/maintenance').then((data) => {
       if (Array.isArray(data)) {
         setPendingMaint(data.filter((r) => r.status === 'pending').length);
+      }
+    }).catch(() => { /* backend offline — ignore */ });
+
+    // Load pending move out count
+    fetchApi<any[]>('/moveouts').then((data) => {
+      if (Array.isArray(data)) {
+        setPendingMoveOut(data.filter((r) => r.status === 'pending').length);
       }
     }).catch(() => { /* backend offline — ignore */ });
 

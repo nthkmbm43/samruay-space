@@ -21,6 +21,7 @@ const breadcrumbMap: Record<string, { label: string; parent?: string }> = {
   '/tenants':     { label: 'ผู้เช่า', parent: '/dashboard' },
   '/billing':     { label: 'ใบแจ้งหนี้', parent: '/dashboard' },
   '/maintenance': { label: 'แจ้งซ่อม', parent: '/dashboard' },
+  '/moveout':     { label: 'แจ้งย้ายออก', parent: '/dashboard' },
   '/reports':     { label: 'รายงาน', parent: '/dashboard' },
   '/settings':    { label: 'ตั้งค่า', parent: '/dashboard' },
   '/meter':       { label: 'จดมิเตอร์', parent: '/dashboard' },

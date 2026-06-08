@@ -14,6 +14,7 @@ const Payment = require('./Payment');
 const MaintenanceRequest = require('./MaintenanceRequest');
 const Setting = require('./Setting');
 const Notification = require('./Notification');
+const MoveOutRequest = require('./MoveOutRequest');
 
 module.exports = {
   sequelize,
@@ -30,5 +31,6 @@ module.exports = {
   Payment,
   MaintenanceRequest,
   Setting,
-  Notification
+  Notification,
+  MoveOutRequest
 };

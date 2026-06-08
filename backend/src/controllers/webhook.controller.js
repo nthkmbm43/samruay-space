@@ -1147,12 +1147,26 @@ async function handleMoveOutConfirmation(lineUserId, replyToken) {
     return await replyText(replyToken, '❌ ไม่พบข้อมูลการเช่าห้องของคุณในระบบ');
   }
 
-  const { Notification } = require('../models');
+  const { Notification, MoveOutRequest } = require('../models');
+  
+  // Create or find a pending MoveOutRequest
+  const [moveOutReq, created] = await MoveOutRequest.findOrCreate({
+    where: {
+      tenant_id: tenant.id,
+      room_id: tenant.room_id,
+      status: 'pending'
+    },
+    defaults: {
+      property_id: tenant.room?.property_id || 1,
+      request_date: new Date()
+    }
+  });
+
   await Notification.create({
     title: 'แจ้งย้ายออก',
     message: `ผู้เช่าห้อง ${tenant?.room?.room_number || 'ไม่ทราบ'} ยืนยันแจ้งย้ายออกผ่านระบบ`,
     type: 'tenant',
-    action_url: '/tenants'
+    action_url: '/moveout'
   });
 
   return await replyText(replyToken, `📝 ยืนยันการแจ้งย้ายออกเรียบร้อยค่ะ สำหรับห้อง ${tenant?.room?.room_number || ''}\nแอดมินจะเข้าไปตรวจสอบความเรียบร้อยของห้อง และจะส่ง [บิลสรุปยอดสุทธิพร้อมหักเงินประกัน] กลับมาให้ในแชทนี้นะคะ`);

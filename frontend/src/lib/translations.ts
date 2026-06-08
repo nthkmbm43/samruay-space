@@ -7,6 +7,7 @@ export const translations = {
     tenants: 'ผู้เช่า',
     billing: 'ใบแจ้งหนี้',
     maintenance: 'แจ้งซ่อม',
+    moveout: 'แจ้งย้ายออก',
     settings: 'ตั้งค่าระบบ',
     logout: 'ออกจากระบบ',
 
@@ -177,6 +178,7 @@ export const translations = {
     tenants: 'Tenants',
     billing: 'Billing',
     maintenance: 'Maintenance',
+    moveout: 'Move-outs',
     settings: 'Settings',
     logout: 'Logout',
 

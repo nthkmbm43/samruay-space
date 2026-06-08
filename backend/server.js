@@ -36,6 +36,7 @@ const notificationRoutes = require('./src/routes/notification.routes');
 const promotionRoutes = require('./src/routes/promotion.routes');
 const reportRoutes = require('./src/routes/report.routes');
 const adminRoutes = require('./src/routes/admin.routes');
+const moveOutRoutes = require('./src/routes/moveout.routes');
 
 // Basic Route
 app.get('/', (req, res) => {
@@ -93,6 +94,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/moveouts', moveOutRoutes);
 
 // Sync Database and Start Server
 const PORT = process.env.PORT || 3001;
