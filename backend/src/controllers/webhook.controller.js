@@ -768,7 +768,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
 4. ห้ามบอกเด็ดขาดว่าคุณคือ AI ให้ทำตัวเป็นผู้ช่วยหอพัก`;
 
             const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash',
+              model: 'gemini-2.0-flash',
               contents: [
                 { role: 'user', parts: [{ text: systemPrompt }] },
                 { role: 'model', parts: [{ text: 'รับทราบค่ะ ฉันจะทำตามเงื่อนไขอย่างเคร่งครัด' }] },
