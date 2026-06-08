@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Clock, Zap, CheckCircle2, XCircle, Loader2,
-  WifiOff, ArrowUpDown, MessageSquare, User, DoorOpen, LogOut, Check
+  WifiOff, ArrowUpDown, MessageSquare, User, DoorOpen, LogOut, Check,
+  ArrowLeft, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'react-hot-toast';
@@ -48,15 +50,22 @@ const formatDate = (dateInput: any, includeTime = false) => {
 };
 
 export default function MoveOutPage() {
+  const router = useRouter();
   const { t } = useLanguage();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Filters & Sorting
+  // Filters, Search & Sorting
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize] = useState<number>(5);
 
   // Dialog State
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
@@ -115,12 +124,61 @@ export default function MoveOutPage() {
   // Processing, filtering & sorting data
   const validRequests = Array.isArray(requests) ? requests.filter(Boolean) : [];
   
+  // Autocomplete Suggestions logic
+  const suggestions = searchQuery.trim() === '' ? [] : (() => {
+    const sMap = new Map<string, { label: string; value: string }>();
+    validRequests.forEach((req) => {
+      const roomNum = req.room?.room_number;
+      const tName = req.tenant?.user ? `${req.tenant.user.first_name} ${req.tenant.user.last_name}` : null;
+      const q = searchQuery.toLowerCase().trim();
+
+      if (roomNum && roomNum.toLowerCase().includes(q)) {
+        sMap.set(`room-${roomNum}`, { label: `ห้อง ${roomNum}`, value: roomNum });
+      }
+      if (tName && tName.toLowerCase().includes(q)) {
+        sMap.set(`tenant-${tName}`, { label: `ผู้เช่า: ${tName}`, value: tName });
+      }
+    });
+    return Array.from(sMap.values());
+  })();
+
   const filteredRequests = validRequests.filter((req) => {
-    if (statusFilter === 'all') return true;
-    const reqStatus = (req.status || '').toLowerCase();
-    const targetFilter = statusFilter.toLowerCase();
-    return reqStatus === targetFilter;
+    // 1. Filter by Status Tab
+    if (statusFilter !== 'all') {
+      const reqStatus = String(req.status || 'pending').toLowerCase();
+      const targetFilter = statusFilter.toLowerCase();
+      if (reqStatus !== targetFilter) return false;
+    }
+
+    // 2. Filter by Search Query
+    if (searchQuery.trim() !== '') {
+      const q = searchQuery.toLowerCase().trim();
+      const roomNum = String(req.room?.room_number || '').toLowerCase();
+      const firstName = String(req.tenant?.user?.first_name || '').toLowerCase();
+      const lastName = String(req.tenant?.user?.last_name || '').toLowerCase();
+      const fullName = `${firstName} ${lastName}`;
+      const phone = String(req.tenant?.user?.phone || '').toLowerCase();
+
+      return (
+        roomNum.includes(q) ||
+        firstName.includes(q) ||
+        lastName.includes(q) ||
+        fullName.includes(q) ||
+        phone.includes(q)
+      );
+    }
+
+    return true;
   });
+
+  const totalPages = Math.ceil(filteredRequests.length / pageSize);
+
+  // Reset page if bounds change
+  useEffect(() => {
+    if (currentPage > 1 && currentPage > totalPages) {
+      setCurrentPage(Math.max(1, totalPages));
+    }
+  }, [filteredRequests.length, totalPages, currentPage]);
 
   const sortedRequests = [...filteredRequests].sort((a, b) => {
     const dateA = a.request_date ? new Date(a.request_date).getTime() : 0;
@@ -129,6 +187,11 @@ export default function MoveOutPage() {
     const valB = isNaN(dateB) ? 0 : dateB;
     return sortOrder === 'asc' ? valA - valB : valB - valA;
   });
+
+  const paginatedRequests = sortedRequests.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   // Summary counts
   const countPending = validRequests.filter((r) => r.status === 'pending').length;
@@ -242,6 +305,17 @@ export default function MoveOutPage() {
         </div>
       )}
 
+      {/* ── Context Navigation Back Button ── */}
+      <div className="mb-2">
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors group"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+          <span>กลับไปหน้าแดชบอร์ด</span>
+        </button>
+      </div>
+
       {/* ── Page Header ── */}
       <div>
         <h1 className="text-2xl font-bold">จัดการการแจ้งย้ายออก</h1>
@@ -274,29 +348,73 @@ export default function MoveOutPage() {
         </div>
       )}
 
-      {/* ── Filters Tabs ── */}
+      {/* ── Controls (Filters & Search) ── */}
       {!loading && !offline && (
-        <div className="flex gap-1.5 bg-muted/40 p-1 rounded-xl max-w-fit border">
-          {[
-            { id: 'all', label: 'ทั้งหมด' },
-            { id: 'pending', label: 'รอดำเนินการ' },
-            { id: 'approved', label: 'ยอมรับเรื่องแล้ว' },
-            { id: 'inspected', label: 'ตรวจห้องแล้ว' },
-            { id: 'rejected', label: 'ปฏิเสธ' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-              className={cn(
-                'px-4 py-2 rounded-lg text-xs font-semibold transition-all',
-                statusFilter === tab.id
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Filters */}
+          <div className="flex gap-1.5 bg-muted/40 p-1 rounded-xl max-w-fit border border-border">
+            {[
+              { id: 'all', label: 'ทั้งหมด' },
+              { id: 'pending', label: 'รอดำเนินการ' },
+              { id: 'approved', label: 'ยอมรับเรื่องแล้ว' },
+              { id: 'inspected', label: 'ตรวจห้องแล้ว' },
+              { id: 'rejected', label: 'ปฏิเสธ' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setStatusFilter(tab.id);
+                  setCurrentPage(1);
+                }}
+                className={cn(
+                  'px-4 py-2 rounded-lg text-xs font-semibold transition-all',
+                  statusFilter === tab.id
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Autocomplete Search Bar */}
+          <div className="relative w-full sm:w-72">
+            <input
+              type="text"
+              placeholder="ค้นหาผู้เช่า หรือห้องพัก..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowSuggestions(true);
+                setCurrentPage(1);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              className="w-full border rounded-xl px-3.5 py-2 bg-background text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 text-foreground border-border"
+            />
+            {showSuggestions && suggestions.length > 0 && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowSuggestions(false)}
+                />
+                <div className="absolute left-0 right-0 mt-1.5 max-h-56 overflow-y-auto rounded-xl border border-border bg-card shadow-2xl z-20 py-1.5 scrollbar-thin">
+                  {suggestions.map((sug, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setSearchQuery(sug.value);
+                        setShowSuggestions(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-xs text-foreground hover:bg-muted transition-colors font-medium"
+                    >
+                      {sug.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -348,7 +466,7 @@ export default function MoveOutPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {sortedRequests.length === 0 ? (
+              {paginatedRequests.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-5 py-16 text-center">
                     <LogOut className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30 rotate-180" />
@@ -356,7 +474,7 @@ export default function MoveOutPage() {
                   </td>
                 </tr>
               ) : (
-                sortedRequests.map((req) => {
+                paginatedRequests.map((req) => {
                   const st = String(req.status || 'pending').toLowerCase();
                   const cfg = (st in STATUS_CFG) ? STATUS_CFG[st as keyof typeof STATUS_CFG] : STATUS_CFG.pending;
                   const Icon = cfg.icon;
@@ -430,6 +548,54 @@ export default function MoveOutPage() {
               )}
             </tbody>
           </table>
+
+          {/* Pagination Controls */}
+          {!loading && !offline && filteredRequests.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-5 py-3.5 bg-muted/20 border-t border-border">
+              <div className="text-xs text-muted-foreground font-medium">
+                แสดง {Math.min(filteredRequests.length, (currentPage - 1) * pageSize + 1)} ถึง {Math.min(filteredRequests.length, currentPage * pageSize)} จากทั้งหมด {filteredRequests.length} รายการ
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="h-8 w-8 p-0 rounded-lg hover:bg-muted"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                {Array.from({ length: totalPages }).map((_, idx) => {
+                  const pageNum = idx + 1;
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={cn(
+                        'h-8 w-8 p-0 rounded-lg text-xs font-bold transition-all',
+                        currentPage === pageNum
+                          ? 'gradient-btn text-white border-0 shadow-sm'
+                          : 'hover:bg-muted'
+                      )}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="h-8 w-8 p-0 rounded-lg hover:bg-muted"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
