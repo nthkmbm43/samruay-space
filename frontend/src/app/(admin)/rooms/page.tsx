@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DoorOpen, Plus, Search, Loader2, Trash2, AlertTriangle,
-  LayoutGrid, List, SlidersHorizontal, X
+  LayoutGrid, List, X, Clock
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -26,10 +26,19 @@ const STATUS_CONFIG = {
 function RoomCard({ room, onEdit, onDelete }: { room: any; onEdit: () => void; onDelete: () => void }) {
   const status = room.status as keyof typeof STATUS_CONFIG;
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.available;
-  const price = parseFloat(room.price_override || room.RoomType?.base_price || 0);
+  const price = parseFloat(room.price_override ?? room.RoomType?.base_price ?? 0);
+  const pricePerDay = parseFloat(room.price_per_day ?? 0);
+
+  // Pending price badge
+  const hasPending = room.price_effective_date && (
+    room.pending_price_override != null || room.pending_price_per_day != null
+  );
+  const pendingEffDate = hasPending
+    ? new Date(room.price_effective_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
+    : null;
 
   return (
-    <div className="glass-card rounded-2xl p-4 group hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
+    <div className="glass-card rounded-2xl p-4 group hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 relative">
       {/* Top */}
       <div className="flex items-start justify-between mb-3">
         <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm', cfg.color)}>
@@ -49,18 +58,31 @@ function RoomCard({ room, onEdit, onDelete }: { room: any; onEdit: () => void; o
       </div>
 
       {/* Price */}
-      <div className="text-primary font-semibold text-sm mb-3">
+      <div className="text-primary font-semibold text-sm mb-1">
         {room.rental_type === 'daily' ? (
-          <span>฿{parseFloat(room.price_per_day || 0).toLocaleString()}/วัน</span>
+          <span>฿{pricePerDay > 0 ? pricePerDay.toLocaleString() : '-'}/วัน</span>
         ) : room.rental_type === 'both' ? (
           <div className="flex flex-col gap-0.5">
-            <span>฿{price.toLocaleString()}/เดือน</span>
-            <span className="text-xs text-muted-foreground">฿{parseFloat(room.price_per_day || 0).toLocaleString()}/วัน</span>
+            <span>฿{price > 0 ? price.toLocaleString() : '-'}/เดือน</span>
+            <span className="text-xs text-muted-foreground">฿{pricePerDay > 0 ? pricePerDay.toLocaleString() : '-'}/วัน</span>
           </div>
         ) : (
-          <span>฿{price.toLocaleString()}/เดือน</span>
+          <span>฿{price > 0 ? price.toLocaleString() : '-'}/เดือน</span>
         )}
       </div>
+
+      {/* Pending Price Badge */}
+      {hasPending && (
+        <div className="flex items-center gap-1 mt-1 mb-2">
+          <Clock className="w-3 h-3 text-amber-500" />
+          <span className="text-[10px] text-amber-500 font-medium">
+            ราคาใหม่มีผล {pendingEffDate}:&nbsp;
+            {room.pending_price_per_day != null && `฿${parseFloat(room.pending_price_per_day).toLocaleString()}/วัน`}
+            {room.pending_price_per_day != null && room.pending_price_override != null && ' · '}
+            {room.pending_price_override != null && `฿${parseFloat(room.pending_price_override).toLocaleString()}/เดือน`}
+          </span>
+        </div>
+      )}
 
       {/* Tenant if occupied */}
       {room.status === 'occupied' && room.Contract?.Tenant && (
@@ -99,17 +121,45 @@ function RoomCard({ room, onEdit, onDelete }: { room: any; onEdit: () => void; o
 
 // ── Room Form Modal ───────────────────────────────────────────
 function RoomModal({ 
-  title, room, properties, tenants, saving, onClose, onSubmit 
+  title, room, properties, tenants, saving, onClose, onSubmit, isEdit
 }: { 
-  title: string; room: any; properties: any[]; tenants: any[]; saving: boolean; onClose: () => void; onSubmit: (form: any) => void 
+  title: string; room: any; properties: any[]; tenants: any[]; saving: boolean;
+  onClose: () => void; onSubmit: (form: any) => void; isEdit?: boolean
 }) {
   const { t } = useLanguage();
-  const [form, setForm] = useState({ ...room });
+
+  // ── Init form state จาก DB data จริงๆ ─────────────────────
+  const [form, setForm] = useState(() => ({
+    ...room,
+    // ป้องกัน null/0 — ใช้ค่า DB จริง ถ้าไม่มีค่อย default
+    price_override: room.price_override != null
+      ? String(parseFloat(room.price_override))
+      : room.display_price != null
+      ? String(room.display_price)
+      : '',
+    price_per_day: room.price_per_day != null
+      ? String(parseFloat(room.price_per_day))
+      : '',
+    rental_type: room.rental_type || 'both',
+  }));
+
+  const [effectiveImmediately, setEffectiveImmediately] = useState(false);
+
+  // ตรวจว่าราคาเปลี่ยนไปจาก DB หรือไม่
+  const origPriceOverride = room.price_override != null ? parseFloat(room.price_override) : null;
+  const origPricePerDay = room.price_per_day != null ? parseFloat(room.price_per_day) : null;
+  const formPriceOverride = form.price_override !== '' ? parseFloat(form.price_override) : null;
+  const formPricePerDay = form.price_per_day !== '' ? parseFloat(form.price_per_day) : null;
+
+  const priceChanged = isEdit && (
+    formPriceOverride !== origPriceOverride ||
+    formPricePerDay !== origPricePerDay
+  );
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
       <div
-        className="bg-card border rounded-2xl p-6 w-full max-w-md shadow-2xl"
+        className="bg-card border rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto"
         style={{ animation: 'fade-in-up 0.25s ease-out' }}
       >
         <div className="flex items-center justify-between mb-5">
@@ -119,7 +169,7 @@ function RoomModal({
           </button>
         </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit({ ...form, effective_immediately: effectiveImmediately }); }} className="space-y-4">
           {/* Property */}
           {!room.id && (
             <div>
@@ -170,7 +220,7 @@ function RoomModal({
             <div>
               <label className="text-sm font-medium mb-1.5 block">รูปแบบการปล่อยเช่า</label>
               <select
-                value={form.rental_type ?? 'both'}
+                value={form.rental_type}
                 onChange={(e) => setForm({ ...form, rental_type: e.target.value })}
                 className="w-full border rounded-xl px-3 py-2.5 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
               >
@@ -181,15 +231,17 @@ function RoomModal({
             </div>
           </div>
 
+          {/* Price Fields */}
           <div className="grid grid-cols-2 gap-3">
-            {(form.rental_type === 'monthly' || form.rental_type === 'both' || !form.rental_type) && (
+            {(form.rental_type === 'monthly' || form.rental_type === 'both') && (
               <div className={form.rental_type === 'monthly' ? 'col-span-2' : ''}>
                 <label className="text-sm font-medium mb-1.5 block">ราคาเช่ารายเดือน (บาท)</label>
                 <input
-                  required type="number"
-                  value={form.price_override ?? form.display_price ?? form.RoomType?.base_price ?? 1500}
+                  required type="number" min="0"
+                  value={form.price_override}
                   onChange={(e) => setForm({ ...form, price_override: e.target.value })}
                   className="w-full border rounded-xl px-3 py-2.5 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  placeholder="เช่น 1500"
                 />
               </div>
             )}
@@ -197,14 +249,47 @@ function RoomModal({
               <div className={form.rental_type === 'daily' ? 'col-span-2' : ''}>
                 <label className="text-sm font-medium mb-1.5 block">ราคาเช่ารายวัน (บาท/คืน)</label>
                 <input
-                  required type="number"
-                  value={form.price_per_day ?? 500}
+                  required type="number" min="0"
+                  value={form.price_per_day}
                   onChange={(e) => setForm({ ...form, price_per_day: e.target.value })}
                   className="w-full border rounded-xl px-3 py-2.5 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  placeholder="เช่น 500"
                 />
               </div>
             )}
           </div>
+
+          {/* ── Temporal Price Toggle (Edit Mode only + ราคาเปลี่ยน) ── */}
+          {isEdit && priceChanged && (
+            <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3.5">
+              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mb-2.5 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                กำหนดเวลาราคาใหม่มีผล
+              </p>
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={effectiveImmediately}
+                    onChange={(e) => setEffectiveImmediately(e.target.checked)}
+                  />
+                  <div className="w-9 h-5 rounded-full bg-muted peer-checked:bg-primary transition-colors duration-200" />
+                  <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 peer-checked:translate-x-4" />
+                </div>
+                <span className="text-sm font-medium">
+                  {effectiveImmediately
+                    ? '✅ ใช้ราคาใหม่ทันที (วันนี้)'
+                    : '⏳ ใช้ราคาใหม่พรุ่งนี้ (เที่ยงคืน)'}
+                </span>
+              </label>
+              <p className="text-[11px] text-muted-foreground mt-1.5 ml-11">
+                {effectiveImmediately
+                  ? 'ราคาจะมีผลทันที และแสดงในระบบทุกส่วนเดี๋ยวนี้'
+                  : 'บิลและการจองที่ดำเนินการอยู่จะไม่ถูกกระทบ ราคาใหม่จะมีผลวันพรุ่งนี้เวลา 00:00 น.'}
+              </p>
+            </div>
+          )}
 
           {/* Status (edit only) */}
           {room.id && (
@@ -278,6 +363,7 @@ export default function RoomsPage() {
   const [deleteRoomId, setDeleteRoomId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [tenants, setTenants] = useState<any[]>([]);
+  const [errorAlert, setErrorAlert] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -323,8 +409,6 @@ export default function RoomsPage() {
     maintenance: rooms.filter((r) => r.status === 'maintenance').length,
   };
 
-  const [errorAlert, setErrorAlert] = useState<string | null>(null);
-
   const handleAddRoom = async (form: any) => {
     setSaving(true);
     try {
@@ -333,10 +417,12 @@ export default function RoomsPage() {
         body: JSON.stringify({
           room_number: form.room_number,
           room_type: form.room_type,
-          base_price: Number(form.price_override || form.display_price),
-          price_override: Number(form.price_override || form.display_price),
+          base_price: form.price_override !== '' ? Number(form.price_override) : undefined,
+          price_override: form.price_override !== '' ? Number(form.price_override) : undefined,
           rental_type: form.rental_type || 'both',
-          price_per_day: form.rental_type !== 'monthly' ? Number(form.price_per_day || 500) : null,
+          price_per_day: (form.rental_type !== 'monthly' && form.price_per_day !== '')
+            ? Number(form.price_per_day)
+            : undefined,
           floor_number: Number(form.floor_number),
           property_id: Number(form.property_id ?? properties[0]?.id),
         }),
@@ -361,12 +447,20 @@ export default function RoomsPage() {
           floor_number: Number(form.floor_number ?? form.Floor?.floor_number),
           room_type: form.room_type ?? form.RoomType?.name,
           rental_type: form.rental_type || 'both',
-          price_per_day: form.rental_type !== 'monthly' ? Number(form.price_per_day || 500) : null,
-          price_override: form.price_override ? Number(form.price_override) : form.display_price ? Number(form.display_price) : null,
+          price_per_day: (form.rental_type !== 'monthly' && form.price_per_day !== '')
+            ? Number(form.price_per_day)
+            : null,
+          price_override: form.price_override !== '' ? Number(form.price_override) : null,
           tenant_id: form.status === 'occupied' ? Number(form.tenant_id) : null,
+          effective_immediately: form.effective_immediately === true,
         }),
       });
-      toast.success('อัปเดตห้องสำเร็จ ✓');
+
+      if (form.effective_immediately) {
+        toast.success('อัปเดตราคาทันทีสำเร็จ ✓');
+      } else {
+        toast.success('บันทึกราคาใหม่แล้ว — มีผลพรุ่งนี้ 00:00 น. ✓');
+      }
       setEditingRoom(null);
       loadData();
     } catch (err: any) { 
@@ -413,10 +507,11 @@ export default function RoomsPage() {
       {isAddOpen && (
         <RoomModal
           title={t('addRoomTitle')}
-          room={{ room_number: '', floor_number: 1, room_type: 'Standard Room', display_price: 1500, property_id: properties[0]?.id }}
+          room={{ room_number: '', floor_number: 1, room_type: 'Standard Room', price_override: '', price_per_day: '', property_id: properties[0]?.id }}
           properties={properties}
           tenants={tenants}
           saving={saving}
+          isEdit={false}
           onClose={() => setIsAddOpen(false)}
           onSubmit={handleAddRoom}
         />
@@ -428,6 +523,7 @@ export default function RoomsPage() {
           properties={properties}
           tenants={tenants}
           saving={saving}
+          isEdit={true}
           onClose={() => setEditingRoom(null)}
           onSubmit={handleEditRoom}
         />
@@ -558,7 +654,11 @@ export default function RoomsPage() {
               {filtered.map((room) => {
                 const st = room.status as keyof typeof STATUS_CONFIG;
                 const cfg = STATUS_CONFIG[st] ?? STATUS_CONFIG.available;
-                const price = parseFloat(room.price_override || room.RoomType?.base_price || 0);
+                const price = parseFloat(room.price_override ?? room.RoomType?.base_price ?? 0);
+                const pricePerDay = parseFloat(room.price_per_day ?? 0);
+                const hasPending = room.price_effective_date && (
+                  room.pending_price_override != null || room.pending_price_per_day != null
+                );
                 return (
                   <tr key={room.id} className="hover:bg-muted/20 transition-colors">
                     <td className="px-5 py-3.5">
@@ -571,7 +671,25 @@ export default function RoomsPage() {
                     </td>
                     <td className="px-5 py-3.5 text-muted-foreground">{room.RoomType?.name ?? '-'}</td>
                     <td className="px-5 py-3.5 text-muted-foreground">ชั้น {room.Floor?.floor_number ?? room.floor_number ?? '-'}</td>
-                    <td className="px-5 py-3.5 font-semibold text-primary">฿{price.toLocaleString()}</td>
+                    <td className="px-5 py-3.5">
+                      <div>
+                        <div className="font-semibold text-primary">
+                          {room.rental_type === 'daily'
+                            ? `฿${pricePerDay > 0 ? pricePerDay.toLocaleString() : '-'}/วัน`
+                            : room.rental_type === 'both'
+                            ? `฿${price > 0 ? price.toLocaleString() : '-'}/เดือน · ฿${pricePerDay > 0 ? pricePerDay.toLocaleString() : '-'}/วัน`
+                            : `฿${price > 0 ? price.toLocaleString() : '-'}/เดือน`}
+                        </div>
+                        {hasPending && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <Clock className="w-3 h-3 text-amber-500" />
+                            <span className="text-[10px] text-amber-500">
+                              ราคาใหม่พรุ่งนี้
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-5 py-3.5">
                       <span className={cn('px-2.5 py-1 rounded-full text-xs font-medium', cfg.badge)}>
                         {cfg.label}

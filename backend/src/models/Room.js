@@ -51,6 +51,22 @@ const Room = sequelize.define('Room', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true
   },
+  // Temporal Price Logic — ราคาที่รอ apply
+  pending_price_override: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: 'ราคาเดือนใหม่ที่รอวันมีผล'
+  },
+  pending_price_per_day: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: 'ราคาวันใหม่ที่รอวันมีผล'
+  },
+  price_effective_date: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'วันที่ราคา pending จะมีผล (null = ไม่มีราคารอ)'
+  },
   status: {
     type: DataTypes.STRING(20),
     defaultValue: 'available'

@@ -12,6 +12,33 @@ const webhookContext = new AsyncLocalStorage();
 // Simple In-Memory State for Chatbot (Ideally use Redis in production)
 const chatState = new Map();
 
+// ─── Helper: Lazy Evaluation — apply pending price ถ้าถึงกำหนดแล้ว ────────────
+async function applyPendingPricesIfDue(rooms) {
+  const now = new Date();
+  const roomsToUpdate = rooms.filter(
+    (r) =>
+      r.price_effective_date &&
+      new Date(r.price_effective_date) <= now &&
+      (r.pending_price_override !== null || r.pending_price_per_day !== null)
+  );
+  if (roomsToUpdate.length === 0) return rooms;
+  await Promise.all(
+    roomsToUpdate.map(async (r) => {
+      const updates = { price_effective_date: null };
+      if (r.pending_price_override !== null) {
+        updates.price_override = r.pending_price_override;
+        updates.pending_price_override = null;
+      }
+      if (r.pending_price_per_day !== null) {
+        updates.price_per_day = r.pending_price_per_day;
+        updates.pending_price_per_day = null;
+      }
+      await r.update(updates);
+    })
+  );
+  return rooms.map((r) => roomsToUpdate.find((u) => u.id === r.id) || r);
+}
+
 exports.handleLineWebhook = async (req, res) => {
   try {
     const property = req.property;
@@ -159,16 +186,18 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         }
 
         const { property } = webhookContext.getStore();
-        const availableRooms = await Room.findAll({
+        let availableRooms = await Room.findAll({
           where: { status: 'available', property_id: property.id },
           order: [['room_number', 'ASC']]
         });
+        // Lazy eval: apply pending prices ถ้าถึงกำหนด
+        availableRooms = await applyPendingPricesIfDue(availableRooms);
 
         let roomListStr = '';
         if (availableRooms.length > 0) {
           roomListStr = availableRooms.map(r => {
-            const mPrice = parseFloat(r.price_override || 1500).toLocaleString();
-            const dPrice = parseFloat(r.price_per_day || 500).toLocaleString();
+            const mPrice = r.price_override != null ? parseFloat(r.price_override).toLocaleString() : '-';
+            const dPrice = r.price_per_day != null ? parseFloat(r.price_per_day).toLocaleString() : '-';
             if (r.rental_type === 'daily') return `ห้อง ${r.room_number}: ${dPrice} บาท/วัน`;
             if (r.rental_type === 'both') return `ห้อง ${r.room_number}: ${mPrice} บาท/เดือน หรือ ${dPrice} บาท/วัน`;
             return `ห้อง ${r.room_number}: ${mPrice} บาท/เดือน`;
@@ -322,18 +351,20 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         return await replyText(replyToken, `ปัจจุบันคุณเข้าพักที่ ห้อง ${tenant.room.room_number} แล้วค่ะ\n\nหากต้องการสอบถามข้อมูลอื่นๆ สามารถเลือกเมนูใน Rich Menu หรือพิมพ์สั่งงานได้เลยนะคะ:\n\nดูบิล: ตรวจสอบยอดชำระเดือนนี้\nแจ้งซ่อม: แจ้งปัญหาต่างๆ\nข่าวสาร: ดูโปรโมชั่นล่าสุด\nแจ้งออก: ทำเรื่องคืนห้องพัก`);
       } else {
         const { property } = webhookContext.getStore();
-        const availableRooms = await Room.findAll({
+        let availableRooms = await Room.findAll({
           where: { status: 'available', property_id: property.id },
           order: [['room_number', 'ASC']]
         });
+        // Lazy eval: apply pending prices ถ้าถึงกำหนด
+        availableRooms = await applyPendingPricesIfDue(availableRooms);
 
         if (availableRooms.length === 0) {
           return await replyText(replyToken, 'ขออภัยค่ะ ขณะนี้ไม่มีห้องว่างเลยค่ะ');
         }
 
         const roomListStr = availableRooms.map(r => {
-          const mPrice = parseFloat(r.price_override || 1500).toLocaleString();
-          const dPrice = parseFloat(r.price_per_day || 500).toLocaleString();
+          const mPrice = r.price_override != null ? parseFloat(r.price_override).toLocaleString() : '-';
+          const dPrice = r.price_per_day != null ? parseFloat(r.price_per_day).toLocaleString() : '-';
           if (r.rental_type === 'daily') return `ห้อง ${r.room_number}: ${dPrice} บาท/วัน`;
           if (r.rental_type === 'both') return `ห้อง ${r.room_number}: ${mPrice} บาท/เดือน หรือ ${dPrice} บาท/วัน`;
           return `ห้อง ${r.room_number}: ${mPrice} บาท/เดือน`;
@@ -1106,7 +1137,13 @@ async function executeDailyBooking(lineUserId, replyToken, data, room) {
   const newTenant = await Tenant.create({ user_id: dbUser.id, room_id: room.id });
   room.status = 'reserved'; await room.save();
 
-  const pricePerDay = parseFloat(room.price_per_day || 500);
+  // Lazy eval: apply pending price ก่อนใช้ราคา
+  const [resolvedRoom] = await applyPendingPricesIfDue([room]);
+  // ใช้ราคาจาก DB จริงๆ — ห้ามใช้ fallback ตัวเลขสุ่ม
+  if (resolvedRoom.price_per_day == null || parseFloat(resolvedRoom.price_per_day) === 0) {
+    return await replyText(replyToken, `⚠️ ขออภัยค่ะ ขณะนี้ห้อง ${room.room_number} ยังไม่ได้ตั้งราคาต่อวัน กรุณาติดต่อเจ้าหน้าที่ค่ะ`);
+  }
+  const pricePerDay = parseFloat(resolvedRoom.price_per_day);
   const totalAmount = pricePerDay * nights;
 
   const checkInObj = new Date(check_in_date);
