@@ -19,6 +19,16 @@ const STATUS_CFG = {
   rejected: { label: 'ปฏิเสธคำขอ', icon: XCircle, badge: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' },
 } as const;
 
+const formatDate = (dateInput: any, includeTime = false) => {
+  if (!dateInput) return '-';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('th-TH', {
+    dateStyle: 'medium',
+    ...(includeTime ? { timeStyle: 'short' } : {})
+  });
+};
+
 export default function MoveOutPage() {
   const { t } = useLanguage();
   const [requests, setRequests] = useState<any[]>([]);
@@ -85,21 +95,27 @@ export default function MoveOutPage() {
   };
 
   // Processing, filtering & sorting data
-  const filteredRequests = requests.filter((req) => {
+  const validRequests = Array.isArray(requests) ? requests.filter(Boolean) : [];
+  
+  const filteredRequests = validRequests.filter((req) => {
     if (statusFilter === 'all') return true;
-    return req.status === statusFilter;
+    const reqStatus = (req.status || '').toLowerCase();
+    const targetFilter = statusFilter.toLowerCase();
+    return reqStatus === targetFilter;
   });
 
   const sortedRequests = [...filteredRequests].sort((a, b) => {
-    const dateA = new Date(a.request_date).getTime();
-    const dateB = new Date(b.request_date).getTime();
-    return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+    const dateA = a.request_date ? new Date(a.request_date).getTime() : 0;
+    const dateB = b.request_date ? new Date(b.request_date).getTime() : 0;
+    const valA = isNaN(dateA) ? 0 : dateA;
+    const valB = isNaN(dateB) ? 0 : dateB;
+    return sortOrder === 'asc' ? valA - valB : valB - valA;
   });
 
   // Summary counts
-  const countPending = requests.filter((r) => r.status === 'pending').length;
-  const countApproved = requests.filter((r) => r.status === 'approved').length;
-  const countInspected = requests.filter((r) => r.status === 'inspected').length;
+  const countPending = validRequests.filter((r) => r.status === 'pending').length;
+  const countApproved = validRequests.filter((r) => r.status === 'approved').length;
+  const countInspected = validRequests.filter((r) => r.status === 'inspected').length;
 
   return (
     <div className="space-y-5 page-enter">
@@ -134,7 +150,7 @@ export default function MoveOutPage() {
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="w-4 h-4" />
-                วันที่แจ้ง: {new Date(selectedRequest.request_date).toLocaleDateString('th-TH', { dateStyle: 'medium' })}
+                วันที่แจ้ง: {formatDate(selectedRequest.request_date)}
               </div>
             </div>
 
@@ -323,7 +339,7 @@ export default function MoveOutPage() {
                 </tr>
               ) : (
                 sortedRequests.map((req) => {
-                  const st = req.status as keyof typeof STATUS_CFG;
+                  const st = (req.status || 'pending').toLowerCase() as keyof typeof STATUS_CFG;
                   const cfg = STATUS_CFG[st] || STATUS_CFG.pending;
 
                   return (
@@ -351,10 +367,7 @@ export default function MoveOutPage() {
 
                       {/* Request Date */}
                       <td className="px-5 py-4 text-muted-foreground text-xs">
-                        {new Date(req.request_date).toLocaleDateString('th-TH', {
-                          dateStyle: 'medium',
-                          timeStyle: 'short',
-                        })}
+                        {formatDate(req.request_date, true)}
                       </td>
 
                       {/* Status Badge */}

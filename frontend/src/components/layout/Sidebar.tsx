@@ -72,14 +72,14 @@ export function Sidebar() {
     // Load pending maintenance count
     fetchApi<any[]>('/maintenance').then((data) => {
       if (Array.isArray(data)) {
-        setPendingMaint(data.filter((r) => r.status === 'pending').length);
+        setPendingMaint(data.filter((r) => r && r.status === 'pending').length);
       }
     }).catch(() => { /* backend offline — ignore */ });
 
     // Load pending move out count
     fetchApi<any[]>('/moveouts').then((data) => {
       if (Array.isArray(data)) {
-        setPendingMoveOut(data.filter((r) => r.status === 'pending').length);
+        setPendingMoveOut(data.filter((r) => r && r.status === 'pending').length);
       }
     }).catch(() => { /* backend offline — ignore */ });
 
