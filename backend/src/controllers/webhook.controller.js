@@ -751,99 +751,6 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         return await handleMoveOutConfirmation(lineUserId, replyToken);
 
       default:
-        const userMsg = text.trim();
-
-        // 1. WiFi
-        if (/(wifi|ไวไฟ|อินเทอร์เน็ต|เน็ต)/i.test(userMsg)) {
-          const wifiSetting = await Setting.findOne({ where: { key: 'WIFI_PASSWORD' } });
-          const wifiPassword = wifiSetting?.value || 'รหัส WiFi คือ 0642477545 ค่ะ';
-          return await replyText(replyToken, wifiPassword);
-        }
-
-        // 2. Water / Elec Rate
-        if (/(ค่าน้ำ|ค่าไฟ)/i.test(userMsg)) {
-          const waterRateSetting = await Setting.findOne({ where: { key: 'water_rate' } });
-          const elecRateSetting = await Setting.findOne({ where: { key: 'elec_rate' } });
-          const waterRate = waterRateSetting?.value || '20';
-          const elecRate = elecRateSetting?.value || '6';
-          return await replyText(replyToken, `ค่าน้ำหน่วยละ ${waterRate} บาท / ค่าไฟหน่วยละ ${elecRate} บาท ค่ะ`);
-        }
-
-        // 3. Invoice
-        if (/(ยอดเดือนนี้|บิล|ค่าห้อง)/i.test(userMsg)) {
-          const tenantForInvoice = await Tenant.findOne({
-            where: { line_user_id: lineUserId, status: 'active' },
-            include: [{ model: Room, as: 'room' }]
-          });
-          
-          if (!tenantForInvoice) {
-            return await replyText(replyToken, 'ไม่พบข้อมูลการเช่าของคุณค่ะ');
-          }
-
-          const pendingInvoice = await Invoice.findOne({
-            where: { tenant_id: tenantForInvoice.id, status: 'pending' },
-            order: [['created_at', 'DESC']]
-          });
-
-          if (!pendingInvoice) {
-            return await replyText(replyToken, 'เดือนนี้ไม่มียอดค้างชำระค่ะ');
-          }
-
-          return await replyText(replyToken, `คุณมียอดค้างชำระเดือน ${pendingInvoice.billing_month} จำนวน ${pendingInvoice.total_amount} บาท ค่ะ รบกวนชำระเงินที่เมนูชำระเงินนะคะ`);
-        }
-
-        // 4. Maintenance
-        if (/(แจ้งซ่อม|ซ่อม)/i.test(userMsg)) {
-          chatState.set(lineUserId, { step: 'WAITING_MAINTENANCE_DETAIL', timestamp: Date.now() });
-          return await replyText(replyToken, 'พบปัญหาอะไรแจ้งมาได้เลยค่ะ พิมพ์รายละเอียด หรือส่งรูปภาพเข้ามาได้เลยค่ะ 🛠️');
-        }
-
-        // 5. Move out
-        if (/(แจ้งออก|ย้ายออก)/i.test(userMsg)) {
-          return await client.replyMessage({
-            replyToken,
-            messages: [{
-              type: "flex",
-              altText: "เงื่อนไขการแจ้งย้ายออก",
-              contents: {
-                type: "bubble",
-                body: {
-                  type: "box",
-                  layout: "vertical",
-                  contents: [
-                    { type: "text", text: "เงื่อนไขการย้ายออก", weight: "bold", size: "lg", color: "#e11d48" },
-                    { type: "text", text: "1. ต้องแจ้งล่วงหน้า 30 วัน", size: "sm", wrap: true, margin: "md" },
-                    { type: "text", text: "2. กรุณาขนย้ายของออกให้เรียบร้อย", size: "sm", wrap: true },
-                    { type: "text", text: "3. เงินประกันจะโอนคืนหลังจากหักค่าใช้จ่าย", size: "sm", wrap: true }
-                  ]
-                },
-                footer: {
-                  type: "box",
-                  layout: "vertical",
-                  contents: [
-                    {
-                      type: "button",
-                      action: {
-                        type: "postback",
-                        label: "ยืนยันการแจ้งย้ายออก",
-                        data: "action=confirm_moveout",
-                        displayText: "ฉันต้องการยืนยันการแจ้งย้ายออก"
-                      },
-                      style: "primary",
-                      color: "#e11d48"
-                    }
-                  ],
-                  paddingAll: "20px"
-                }
-              }
-            }]
-          });
-        }
-
-        // 6. Fallback
-        return await replyText(replyToken, 'กรุณารอสักครู่นะคะ เดี๋ยวแอดมินมาตอบแชทเองค่ะ');
-
-        /*
         // Attempt to answer with AI if GEMINI_API_KEY is available
         if (process.env.GEMINI_API_KEY) {
           const { property } = webhookContext.getStore();
@@ -851,14 +758,14 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           try {
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY.trim() });
             
-            const systemPrompt = \`คุณคือผู้ช่วย AI ประจำหอพัก "\${property.name}" 
-ข้อมูลหอพักที่คุณรู้: \${property.ai_knowledge_base || 'ไม่มีข้อมูลเพิ่มเติม'}
+            const systemPrompt = `คุณคือผู้ช่วย AI ประจำหอพัก "${property.name}" 
+ข้อมูลหอพักที่คุณรู้: ${property.ai_knowledge_base || 'ไม่มีข้อมูลเพิ่มเติม'}
 
 ข้อกำหนดการตอบ:
 1. ตอบสั้นๆ กระชับ สุภาพ เป็นกันเอง มีหางเสียง (ครับ/ค่ะ)
 2. ถ้าคำถามถามถึงข้อมูลที่มีในความรู้หอพัก ให้ตอบไปตามนั้น
 3. ถ้าไม่รู้คำตอบ, ไม่แน่ใจ, หรือผู้เช่ามีเรื่องร้องเรียน/แจ้งซ่อม/อยากคุยกับคน ให้ตอบเป๊ะๆ ด้วยประโยคนี้เท่านั้น: "กรุณารอสักครู่นะคะ เดี๋ยวแอดมินมาตอบแชทเองค่ะ"
-4. ห้ามบอกเด็ดขาดว่าคุณคือ AI ให้ทำตัวเป็นผู้ช่วยหอพัก\`;
+4. ห้ามบอกเด็ดขาดว่าคุณคือ AI ให้ทำตัวเป็นผู้ช่วยหอพัก`;
 
             const response = await ai.models.generateContent({
               model: 'gemini-3.5-flash',
@@ -880,7 +787,6 @@ async function handleIncomingText(lineUserId, text, replyToken) {
           // No AI key, use classic fallback
           return await replyText(replyToken, "กรุณารอสักครู่นะคะ เดี๋ยวแอดมินมาตอบแชทเองค่ะ");
         }
-        */
     }
   } catch (error) {
     console.error('Error handling text:', error);
