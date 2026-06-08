@@ -44,6 +44,76 @@ exports.handleLineWebhook = async (req, res) => {
   }
 };
 
+function getKnowledgeResponse(kbText, query) {
+  if (!kbText) return null;
+  
+  const lines = kbText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  const topics = [
+    {
+      key: 'wifi',
+      regex: /wifi|wi-fi|ไวไฟ|รหัสไวไฟ|รหัส wifi|เน็ต|อินเทอร์เน็ต/i,
+      label: 'Wi-Fi'
+    },
+    {
+      key: 'billing',
+      regex: /ค่าน้ำ|ค่าไฟ|เรทน้ำ|เรทไฟ|หน่วยละ|ค่าเช่า/i,
+      label: 'ค่าน้ำ'
+    },
+    {
+      key: 'hours',
+      regex: /เวลาเข้าออก|เวลา เข้าออก|เปิดปิด|เข้าออก|เปิดกี่โมง|ปิดกี่โมง|เข้าพัก/i,
+      label: 'เข้า-ออก'
+    },
+    {
+      key: 'rules',
+      regex: /กฎ|ระเบียบ|ข้อห้าม|กฎระเบียบ/i,
+      label: 'กฎระเบียบ'
+    },
+    {
+      key: 'moveout',
+      regex: /ย้ายออก|แจ้งย้ายออก|คืนห้อง/i,
+      label: 'ย้ายออก'
+    },
+    {
+      key: 'maintenance',
+      regex: /แจ้งซ่อม|ซ่อม|เสีย|พัง/i,
+      label: 'แจ้งซ่อม'
+    },
+    {
+      key: 'contact',
+      regex: /เบอร์|โทร|ติดต่อ|ฉุกเฉิน|เบอร์โทร/i,
+      label: 'เบอร์โทร'
+    }
+  ];
+
+  const matchedTopic = topics.find(t => t.regex.test(query));
+  if (matchedTopic) {
+    let matchedLine = lines.find(line => {
+      const lowerLine = line.toLowerCase();
+      const lowerLabel = matchedTopic.label.toLowerCase();
+      
+      if (lowerLine.includes(lowerLabel)) return true;
+      
+      if (matchedTopic.key === 'wifi' && (lowerLine.includes('wifi') || lowerLine.includes('wi-fi') || lowerLine.includes('ไวไฟ'))) return true;
+      if (matchedTopic.key === 'billing' && (lowerLine.includes('ค่าน้ำ') || lowerLine.includes('ค่าไฟ') || lowerLine.includes('ค่าเช่า'))) return true;
+      if (matchedTopic.key === 'hours' && (lowerLine.includes('เวลา') || lowerLine.includes('ชั่วโมง') || lowerLine.includes('เปิด-ปิด') || lowerLine.includes('เปิดปิด'))) return true;
+      if (matchedTopic.key === 'rules' && (lowerLine.includes('กฎ') || lowerLine.includes('ระเบียบ'))) return true;
+      if (matchedTopic.key === 'moveout' && (lowerLine.includes('ย้ายออก') || lowerLine.includes('คืนห้อง'))) return true;
+      if (matchedTopic.key === 'maintenance' && (lowerLine.includes('ซ่อม') || lowerLine.includes('พัง') || lowerLine.includes('เสีย'))) return true;
+      if (matchedTopic.key === 'contact' && (lowerLine.includes('เบอร์') || lowerLine.includes('โทร') || lowerLine.includes('ติดต่อ'))) return true;
+      
+      return false;
+    });
+    
+    if (matchedLine) {
+      return matchedLine;
+    }
+  }
+  
+  return null;
+}
+
 async function handleIncomingText(lineUserId, text, replyToken) {
   try {
     const { client } = webhookContext.getStore();
@@ -751,9 +821,16 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         return await handleMoveOutConfirmation(lineUserId, replyToken);
 
       default:
+        const { property } = webhookContext.getStore();
+        if (property && property.ai_knowledge_base) {
+          const matchedResponse = getKnowledgeResponse(property.ai_knowledge_base, text);
+          if (matchedResponse) {
+            return await replyText(replyToken, matchedResponse);
+          }
+        }
+
         // Attempt to answer with AI if GEMINI_API_KEY is available
         if (process.env.GEMINI_API_KEY) {
-          const { property } = webhookContext.getStore();
           
           try {
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY.trim() });
