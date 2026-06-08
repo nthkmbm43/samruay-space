@@ -768,7 +768,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
 4. ห้ามบอกเด็ดขาดว่าคุณคือ AI ให้ทำตัวเป็นผู้ช่วยหอพัก`;
 
             const response = await ai.models.generateContent({
-              model: 'gemini-2.0-flash',
+              model: 'gemini-1.5-flash',
               contents: [
                 { role: 'user', parts: [{ text: systemPrompt }] },
                 { role: 'model', parts: [{ text: 'รับทราบค่ะ ฉันจะทำตามเงื่อนไขอย่างเคร่งครัด' }] },
@@ -781,7 +781,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
             
           } catch (aiError) {
             console.error('AI generation error:', aiError);
-            return await replyText(replyToken, "เกิดข้อผิดพลาดจาก AI: " + (aiError.message || aiError));
+            return await replyText(replyToken, "กรุณารอสักครู่นะคะ เดี๋ยวแอดมินมาตอบแชทเองค่ะ");
           }
         } else {
           // No AI key, use classic fallback
