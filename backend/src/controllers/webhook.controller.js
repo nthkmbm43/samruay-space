@@ -781,7 +781,7 @@ async function handleIncomingText(lineUserId, text, replyToken) {
             
           } catch (aiError) {
             console.error('AI generation error:', aiError);
-            return await replyText(replyToken, "กรุณารอสักครู่นะคะ เดี๋ยวแอดมินมาตอบแชทเองค่ะ");
+            return await replyText(replyToken, "เกิดข้อผิดพลาดจาก AI: " + (aiError.message || aiError));
           }
         } else {
           // No AI key, use classic fallback
