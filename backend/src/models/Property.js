@@ -70,6 +70,16 @@ const Property = sequelize.define('Property', {
   ai_knowledge_base: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  water_rate: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 20.00
+  },
+  elec_rate: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 6.00
   }
 }, {
   tableName: 'properties',

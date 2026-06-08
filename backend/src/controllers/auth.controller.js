@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { User, Tenant, Room } = require('../models');
+const { User, Tenant, Room, Invoice } = require('../models');
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -173,5 +173,56 @@ exports.setupAdmin = async (req, res) => {
   } catch (error) {
     console.error('Setup error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.getLiffBill = async (req, res) => {
+  try {
+    const { line_uid } = req.query;
+    if (!line_uid) {
+      return res.status(400).json({ message: 'line_uid is required' });
+    }
+
+    const user = await User.findOne({ where: { line_user_id: line_uid } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const tenant = await Tenant.findOne({
+      where: { user_id: user.id },
+      include: [{ model: Room, as: 'room' }]
+    });
+
+    if (!tenant) {
+      return res.status(404).json({ message: 'Tenant not found' });
+    }
+
+    // Find any pending invoice for this tenant
+    const pendingBill = await Invoice.findOne({
+      where: {
+        tenant_id: tenant.id,
+        status: 'pending'
+      },
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json({
+      tenant: {
+        first_name: user.first_name,
+        last_name: user.last_name,
+        room_number: tenant.room?.room_number || '-'
+      },
+      bill: pendingBill ? {
+        id: pendingBill.id,
+        invoice_number: pendingBill.invoice_number,
+        period_month: pendingBill.period_month,
+        period_year: pendingBill.period_year,
+        total: parseFloat(pendingBill.total),
+        due_date: pendingBill.due_date
+      } : null
+    });
+  } catch (error) {
+    console.error('Get LIFF bill error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };

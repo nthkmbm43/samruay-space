@@ -78,14 +78,14 @@ exports.updateRequestStatus = async (req, res) => {
         
         let messageText = '';
         const roomNumber = request.room?.room_number || '';
-        const notesStr = notes ? `\nหมายเหตุ: ${notes}` : '';
+        const notesVal = notes || request.notes || '';
 
         if (status === 'approved') {
-          messageText = `📝 คำร้องแจ้งย้ายออกสำหรับห้อง ${roomNumber} ได้รับการยอมรับเรื่องแล้วค่ะ${notesStr}\n\nแอดมินจะดำเนินการขั้นต่อไปตามลำดับค่ะ`;
+          messageText = `✅ คำร้องแจ้งย้ายออกได้รับการอนุมัติแล้วค่ะ สำหรับห้อง ${roomNumber}\n${notesVal}\n\nแอดมินจะดำเนินการขั้นต่อไปตามลำดับค่ะ`;
         } else if (status === 'inspected') {
-          messageText = `✅ ตรวจสภาพห้องพักห้อง ${roomNumber} เรียบร้อยแล้วค่ะ${notesStr}\n\nขอบคุณที่ใช้บริการหอพักแม่สำรวยนะคะ 🙏`;
+          messageText = `🔍 ตรวจสอบห้องพักเรียบร้อยแล้วค่ะ สำหรับห้อง ${roomNumber}\n${notesVal}\n\nระบบได้ทำการบันทึกข้อมูลการคืนห้องพักเรียบร้อยแล้วค่ะ`;
         } else if (status === 'rejected') {
-          messageText = `❌ คำร้องแจ้งย้ายออกสำหรับห้อง ${roomNumber} ถูกปฏิเสธค่ะ${notesStr}`;
+          messageText = `❌ คำร้องแจ้งย้ายออกถูกปฏิเสธค่ะ สำหรับห้อง ${roomNumber}\n💬 เหตุผลจากแอดมิน: ${notesVal}\n\nหากมีข้อสงสัยกรุณาติดต่อแอดมินค่ะ`;
         }
 
         if (messageText) {

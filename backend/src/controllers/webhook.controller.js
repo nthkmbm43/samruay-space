@@ -358,13 +358,14 @@ async function handleIncomingText(lineUserId, text, replyToken) {
         const latestBill = await Invoice.findOne({ 
           where: { 
             tenant_id: tenant.id,
+            status: 'pending',
             invoice_number: { [Op.notLike]: 'BK-%' } 
           }, 
           order: [['created_at', 'DESC']],
           include: [{ model: Room, as: 'Room' }]
         });
         
-        if (!latestBill) return await replyText(replyToken, 'คุณยังไม่มีบิลค่าเช่ารายเดือนในระบบค่ะ');
+        if (!latestBill) return await replyText(replyToken, 'เดือนนี้ไม่มียอดค้างชำระค่ะ');
 
         const appUrl = process.env.APP_URL || 'https://samruay-backend.onrender.com';
         const promptPayNumber = process.env.PROMPTPAY_NUMBER || 'your-promptpay-number';

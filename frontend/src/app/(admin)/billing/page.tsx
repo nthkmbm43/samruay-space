@@ -43,6 +43,40 @@ export default function BillingPage() {
   const [meterReadings, setMeterReadings] = useState<any[]>([]);
   const [savingMeters, setSavingMeters] = useState(false);
 
+  // Billing Test Modal States
+  const [isTestOpen, setIsTestOpen] = useState(false);
+  const [testRoomPrice, setTestRoomPrice] = useState('3500');
+  const [testWaterUnits, setTestWaterUnits] = useState('5');
+  const [testElecUnits, setTestElecUnits] = useState('80');
+  const [testResult, setTestResult] = useState<any>(null);
+  const [calculatingTest, setCalculatingTest] = useState(false);
+
+  const handleTestCalculate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!propertyId) {
+      toast.error('กรุณาเลือกหอพัก');
+      return;
+    }
+    setCalculatingTest(true);
+    setTestResult(null);
+    try {
+      const res = await fetchApi<any>('/billing/invoices/test-calculate', {
+        method: 'POST',
+        body: JSON.stringify({
+          property_id: Number(propertyId),
+          room_price: Number(testRoomPrice || 0),
+          water_units: Number(testWaterUnits || 0),
+          elec_units: Number(testElecUnits || 0)
+        })
+      });
+      setTestResult(res);
+    } catch (err: any) {
+      toast.error(err.message || 'เกิดข้อผิดพลาดในการทดสอบคำนวณ');
+    } finally {
+      setCalculatingTest(false);
+    }
+  };
+
   const loadData = async () => {
     try {
       const [invData, propData, roomData, meterData] = await Promise.all([
@@ -306,9 +340,12 @@ export default function BillingPage() {
           <h1 className="text-2xl font-bold">{t('billingTitle') || 'ใบแจ้งหนี้และบิลค่าเช่า'}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t('billingDesc') || 'จัดการใบแจ้งหนี้ ตรวจสอบสลิปโอนเงิน และจดมิเตอร์'}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="rounded-xl gap-2 border-dashed" onClick={() => setIsTestOpen(true)}>
+            <Zap className="w-4 h-4 text-amber-500 animate-pulse" />ทดสอบคำนวณบิล
+          </Button>
           <Button variant="outline" className="rounded-xl gap-2" onClick={() => openMeterModal()}>
-            <Zap className="w-4 h-4" />จดมิเตอร์
+            💧จดมิเตอร์
           </Button>
           <Button className="gradient-btn text-white shrink-0 rounded-xl gap-2" onClick={() => setIsDialogOpen(true)}>
             <Plus className="w-4 h-4" />
@@ -840,6 +877,113 @@ export default function BillingPage() {
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Billing Test Modal */}
+      {isTestOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-background rounded-2xl w-full max-w-md shadow-2xl border flex flex-col max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-amber-500 animate-pulse" />
+                  ทดสอบคำนวณบิลค่าเช่า
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">ใช้เช็คพฤติกรรมการคำนวณยอดเงินและอัตราค่าน้ำ/ไฟจริง</p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setIsTestOpen(false);
+                  setTestResult(null);
+                }} 
+                className="w-7 h-7 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <form onSubmit={handleTestCalculate} className="p-5 space-y-4">
+              <div>
+                <label className="text-sm font-semibold mb-1 block">หอพัก (Property)</label>
+                <select 
+                  value={propertyId} 
+                  onChange={e => setPropertyId(e.target.value)} 
+                  className="w-full border rounded-xl px-3 py-2 bg-background text-sm border-border focus:ring-2 focus:ring-primary/30 outline-none"
+                >
+                  <option value="">-- เลือกหอพัก --</option>
+                  {properties.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              
+              <div>
+                <label className="text-sm font-semibold mb-1 block">ราคาห้องพักพื้นฐาน (บาท)</label>
+                <input 
+                  type="number" 
+                  required 
+                  value={testRoomPrice} 
+                  onChange={e => setTestRoomPrice(e.target.value)} 
+                  className="w-full border rounded-xl px-3 py-2 bg-background text-sm border-border focus:ring-2 focus:ring-primary/30 outline-none"
+                  placeholder="เช่น 3500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-semibold mb-1 block">จำนวนหน่วยน้ำที่ใช้</label>
+                  <input 
+                    type="number" 
+                    required 
+                    value={testWaterUnits} 
+                    onChange={e => setTestWaterUnits(e.target.value)} 
+                    className="w-full border rounded-xl px-3 py-2 bg-background text-sm border-border focus:ring-2 focus:ring-primary/30 outline-none"
+                    placeholder="เช่น 5"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold mb-1 block">จำนวนหน่วยไฟที่ใช้</label>
+                  <input 
+                    type="number" 
+                    required 
+                    value={testElecUnits} 
+                    onChange={e => setTestElecUnits(e.target.value)} 
+                    className="w-full border rounded-xl px-3 py-2 bg-background text-sm border-border focus:ring-2 focus:ring-primary/30 outline-none"
+                    placeholder="เช่น 80"
+                  />
+                </div>
+              </div>
+
+              <Button type="submit" disabled={calculatingTest || !propertyId} className="w-full gradient-btn text-white py-2 rounded-xl">
+                {calculatingTest && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                คำนวณยอดทดสอบ
+              </Button>
+            </form>
+
+            {testResult && (
+              <div className="p-5 border-t bg-muted/20 space-y-3">
+                <h4 className="font-bold text-sm text-foreground">ผลการคำนวณเงินจำลอง ({testResult.property_name})</h4>
+                <div className="text-xs space-y-2 text-muted-foreground">
+                  <div className="flex justify-between">
+                    <span>ค่าห้องพัก:</span>
+                    <span className="font-semibold text-foreground">฿{parseFloat(testResult.room_price).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>ค่าน้ำประปา ({testResult.water_units} หน่วย × ฿{testResult.water_rate}/หน่วย):</span>
+                    <span className="font-semibold text-foreground">฿{parseFloat(testResult.water_amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>ค่าไฟฟ้า ({testResult.elec_units} หน่วย × ฿{testResult.elec_rate}/หน่วย):</span>
+                    <span className="font-semibold text-foreground">฿{parseFloat(testResult.elec_amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="border-t border-dashed my-2 pt-2 flex justify-between text-sm font-bold text-foreground">
+                    <span>ยอดรวมสุทธิ:</span>
+                    <span className="text-primary text-base">฿{parseFloat(testResult.total).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

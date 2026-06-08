@@ -1,4 +1,4 @@
-const { Invoice, Payment, Room, Contract, MeterReading, Tenant, Setting, MaintenanceRequest } = require('../models');
+const { Invoice, Payment, Room, Contract, MeterReading, Tenant, Setting, MaintenanceRequest, Property } = require('../models');
 const { Op } = require('sequelize');
 
 exports.getAllInvoices = async (req, res) => {
@@ -115,10 +115,16 @@ exports.generateInvoices = async (req, res) => {
 
     const generatedInvoices = [];
 
+    const property = await Property.findByPk(property_id);
     const waterRateSetting = await Setting.findOne({ where: { key: 'water_rate' } });
     const electricRateSetting = await Setting.findOne({ where: { key: 'elec_rate' } });
-    const water_rate = waterRateSetting ? parseFloat(waterRateSetting.value) : 0; 
-    const elec_rate = electricRateSetting ? parseFloat(electricRateSetting.value) : 0;
+    
+    const water_rate = property && property.water_rate !== null && property.water_rate !== undefined
+      ? parseFloat(property.water_rate)
+      : (waterRateSetting ? parseFloat(waterRateSetting.value) : 20.00); 
+    const elec_rate = property && property.elec_rate !== null && property.elec_rate !== undefined
+      ? parseFloat(property.elec_rate)
+      : (electricRateSetting ? parseFloat(electricRateSetting.value) : 6.00);
 
     for (const invData of invoices) {
       // Find meter reading for this period
@@ -155,7 +161,11 @@ exports.generateInvoices = async (req, res) => {
         }
       }
 
-      const room_price = Number(invData.room_price || 0);
+      const room = await Room.findByPk(invData.room_id);
+      const room_price = room 
+        ? Number(room.price_override || room.price || 0)
+        : Number(invData.room_price || 0);
+
       const subtotal = room_price + water_amount + elec_amount + extra_cost_total;
       const total = subtotal; // Ignoring VAT for now
 
@@ -196,6 +206,56 @@ exports.generateInvoices = async (req, res) => {
     });
   } catch (error) {
     console.error('Generate invoices error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.testCalculateBill = async (req, res) => {
+  try {
+    const { property_id, room_price, water_units, elec_units } = req.body;
+    
+    if (!property_id) {
+      return res.status(400).json({ message: 'Property ID is required' });
+    }
+
+    // Query rates directly from the Property table
+    const property = await Property.findByPk(property_id);
+    if (!property) {
+      return res.status(404).json({ message: 'Property not found' });
+    }
+
+    const waterRateSetting = await Setting.findOne({ where: { key: 'water_rate' } });
+    const electricRateSetting = await Setting.findOne({ where: { key: 'elec_rate' } });
+
+    const water_rate = property.water_rate !== null && property.water_rate !== undefined
+      ? parseFloat(property.water_rate)
+      : (waterRateSetting ? parseFloat(waterRateSetting.value) : 20.00);
+
+    const elec_rate = property.elec_rate !== null && property.elec_rate !== undefined
+      ? parseFloat(property.elec_rate)
+      : (electricRateSetting ? parseFloat(electricRateSetting.value) : 6.00);
+
+    const water_units_val = parseFloat(water_units || 0);
+    const elec_units_val = parseFloat(elec_units || 0);
+    const room_price_val = parseFloat(room_price || 0);
+
+    const water_amount = water_units_val * water_rate;
+    const elec_amount = elec_units_val * elec_rate;
+    const total = room_price_val + water_amount + elec_amount;
+
+    res.json({
+      property_name: property.name,
+      room_price: room_price_val,
+      water_units: water_units_val,
+      water_rate,
+      water_amount,
+      elec_units: elec_units_val,
+      elec_rate,
+      elec_amount,
+      total
+    });
+  } catch (error) {
+    console.error('Test calculate bill error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

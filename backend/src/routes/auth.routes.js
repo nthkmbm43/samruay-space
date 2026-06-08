@@ -6,6 +6,7 @@ const { protect } = require('../middlewares/auth.middleware');
 router.post('/login', authController.login);
 router.post('/register', authController.register);
 router.post('/register-tenant', authController.registerTenant);
+router.get('/liff-bill', authController.getLiffBill);
 router.get('/me', protect, authController.me);
 router.get('/setup', authController.setupAdmin);
 

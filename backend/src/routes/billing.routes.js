@@ -13,6 +13,9 @@ router.route('/invoices')
 router.route('/invoices/preview')
   .post(authorize('super_admin', 'admin'), billingController.previewInvoices);
 
+router.route('/invoices/test-calculate')
+  .post(authorize('super_admin', 'admin'), billingController.testCalculateBill);
+
 router.route('/invoices/generate')
   .post(authorize('super_admin', 'admin'), billingController.generateInvoices);
 

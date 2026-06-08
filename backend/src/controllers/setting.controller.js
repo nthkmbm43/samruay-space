@@ -1,4 +1,4 @@
-const { Setting } = require('../models');
+const { Setting, Property } = require('../models');
 
 exports.getSettings = async (req, res) => {
   try {
@@ -28,6 +28,14 @@ exports.updateSettings = async (req, res) => {
         setting.value = String(value);
         await setting.save();
       }
+    }
+
+    // Sync water_rate and elec_rate to the Property table
+    if (settingsData.water_rate !== undefined || settingsData.elec_rate !== undefined) {
+      const updateData = {};
+      if (settingsData.water_rate !== undefined) updateData.water_rate = parseFloat(settingsData.water_rate);
+      if (settingsData.elec_rate !== undefined) updateData.elec_rate = parseFloat(settingsData.elec_rate);
+      await Property.update(updateData, { where: {} });
     }
     
     res.json({ message: 'Settings updated successfully' });
