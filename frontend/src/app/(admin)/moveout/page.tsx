@@ -21,12 +21,30 @@ const STATUS_CFG = {
 
 const formatDate = (dateInput: any, includeTime = false) => {
   if (!dateInput) return '-';
-  const d = new Date(dateInput);
-  if (isNaN(d.getTime())) return '-';
-  return d.toLocaleDateString('th-TH', {
-    dateStyle: 'medium',
-    ...(includeTime ? { timeStyle: 'short' } : {})
-  });
+  try {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '-';
+    try {
+      return d.toLocaleDateString('th-TH', {
+        dateStyle: 'medium',
+        ...(includeTime ? { timeStyle: 'short' } : {})
+      });
+    } catch (localeErr) {
+      // Fallback for environments lacking full ICU / dateStyle support
+      const y = d.getFullYear() + 543;
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${day}/${m}/${y}`;
+      if (includeTime) {
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `${dateStr} ${hh}:${mm}`;
+      }
+      return dateStr;
+    }
+  } catch (e) {
+    return '-';
+  }
 };
 
 export default function MoveOutPage() {
@@ -148,7 +166,7 @@ export default function MoveOutPage() {
                 <User className="w-4 h-4" />
                 ผู้เช่า: {selectedRequest.tenant?.user?.first_name} {selectedRequest.tenant?.user?.last_name}
               </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="flex items-center gap-2 text-muted-foreground" suppressHydrationWarning>
                 <Clock className="w-4 h-4" />
                 วันที่แจ้ง: {formatDate(selectedRequest.request_date)}
               </div>
@@ -339,8 +357,9 @@ export default function MoveOutPage() {
                 </tr>
               ) : (
                 sortedRequests.map((req) => {
-                  const st = (req.status || 'pending').toLowerCase() as keyof typeof STATUS_CFG;
-                  const cfg = STATUS_CFG[st] || STATUS_CFG.pending;
+                  const st = String(req.status || 'pending').toLowerCase();
+                  const cfg = (st in STATUS_CFG) ? STATUS_CFG[st as keyof typeof STATUS_CFG] : STATUS_CFG.pending;
+                  const Icon = cfg.icon;
 
                   return (
                     <tr key={req.id} className="hover:bg-muted/10 transition-colors">
@@ -366,14 +385,14 @@ export default function MoveOutPage() {
                       </td>
 
                       {/* Request Date */}
-                      <td className="px-5 py-4 text-muted-foreground text-xs">
+                      <td className="px-5 py-4 text-muted-foreground text-xs" suppressHydrationWarning>
                         {formatDate(req.request_date, true)}
                       </td>
 
                       {/* Status Badge */}
                       <td className="px-5 py-4">
                         <span className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold', cfg.badge)}>
-                          <cfg.icon className="w-3.5 h-3.5" />
+                          <Icon className="w-3.5 h-3.5" />
                           {cfg.label}
                         </span>
                       </td>
